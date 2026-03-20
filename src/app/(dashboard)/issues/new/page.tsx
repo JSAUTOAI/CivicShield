@@ -2,6 +2,8 @@
 
 import * as React from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -39,7 +41,9 @@ const roleOptions: SelectOption[] = USER_ROLES.map((r) => ({
 }))
 
 export default function NewIssuePage() {
+  const router = useRouter()
   const [currentStep, setCurrentStep] = React.useState(0)
+  const [submitting, setSubmitting] = React.useState(false)
   const [formData, setFormData] = React.useState({
     category: "",
     role: "complainant",
@@ -420,18 +424,19 @@ export default function NewIssuePage() {
             </div>
           )}
 
-          {/* STEP 4: Analysis (placeholder) */}
+          {/* STEP 4: Analysis (submitting) */}
           {currentStep === 3 && (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-brand-50 dark:bg-brand-900/20">
                 <div className="h-8 w-8 animate-spin rounded-full border-2 border-brand-200 border-t-brand-600" />
               </div>
               <h2 className="text-lg font-semibold text-foreground">
-                Analyzing Your Issue...
+                {submitting ? "Analyzing Your Issue..." : "Ready to Submit"}
               </h2>
               <p className="mt-2 text-sm text-muted-foreground">
-                Our AI is reviewing your issue against UK legislation, case law, and
-                relevant regulations. This typically takes 10-30 seconds.
+                {submitting
+                  ? "Our AI is reviewing your issue against UK legislation, case law, and relevant regulations. This typically takes 10-30 seconds."
+                  : "Click Submit and Analyze to begin the AI legal analysis."}
               </p>
             </div>
           )}
@@ -456,7 +461,60 @@ export default function NewIssuePage() {
         {currentStep < steps.length - 1 ? (
           <Button
             variant="brand"
-            onClick={() => setCurrentStep(currentStep + 1)}
+            loading={submitting}
+            onClick={async () => {
+              if (currentStep === 2) {
+                // Submit issue and trigger analysis
+                setCurrentStep(3)
+                setSubmitting(true)
+                try {
+                  // Create the issue
+                  const issueRes = await fetch("/api/issues", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      issueCategory: formData.category,
+                      issueType: formData.issueType || formData.category,
+                      description: formData.description,
+                      organization: formData.organization,
+                      individual: formData.individual || undefined,
+                      dateOfIncident: formData.dateOfIncident,
+                      timeOfIncident: formData.timeOfIncident || undefined,
+                      location: formData.location,
+                      userRole: formData.role,
+                      isAnonymous: formData.isAnonymous,
+                    }),
+                  })
+
+                  if (!issueRes.ok) {
+                    const err = await issueRes.json()
+                    throw new Error(err.error || "Failed to create issue")
+                  }
+
+                  const issue = await issueRes.json()
+
+                  // Trigger AI analysis
+                  const analysisRes = await fetch(`/api/issues/${issue.id}/analyze`, {
+                    method: "POST",
+                  })
+
+                  if (!analysisRes.ok) {
+                    toast.error("Issue saved but analysis failed. You can retry from the issue page.")
+                    router.push(`/issues/${issue.id}`)
+                    return
+                  }
+
+                  toast.success("Issue analyzed successfully!")
+                  router.push(`/issues/${issue.id}`)
+                } catch (err) {
+                  toast.error((err as Error).message)
+                  setSubmitting(false)
+                  setCurrentStep(2)
+                }
+              } else {
+                setCurrentStep(currentStep + 1)
+              }
+            }}
             className="gap-2"
           >
             {currentStep === 2 ? "Submit and Analyze" : `Next: ${steps[currentStep + 1]}`}

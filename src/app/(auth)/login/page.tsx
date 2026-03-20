@@ -2,20 +2,46 @@
 
 import * as React from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { signIn } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Logo } from "@/components/layout/logo"
-import { Mail, Lock, ArrowRight } from "lucide-react"
+import { Mail, Lock, ArrowRight, AlertCircle } from "lucide-react"
 
 export default function LoginPage() {
+  const router = useRouter()
   const [loading, setLoading] = React.useState(false)
+  const [error, setError] = React.useState("")
+  const [email, setEmail] = React.useState("")
+  const [password, setPassword] = React.useState("")
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
-    // TODO: Implement actual auth
-    setTimeout(() => setLoading(false), 1500)
+    setError("")
+
+    try {
+      const result = await signIn("credentials", {
+        email,
+        password,
+        redirect: false,
+      })
+
+      if (result?.error) {
+        setError(result.error === "CredentialsSignin"
+          ? "Invalid email or password"
+          : result.error)
+      } else {
+        router.push("/")
+        router.refresh()
+      }
+    } catch {
+      setError("An unexpected error occurred")
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -33,6 +59,13 @@ export default function LoginPage() {
         </CardHeader>
 
         <CardContent className="px-0 lg:px-6">
+          {error && (
+            <div className="mb-4 flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+              <AlertCircle className="h-4 w-4 flex-shrink-0" />
+              {error}
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="mb-2 block text-sm font-medium text-foreground">
@@ -42,6 +75,8 @@ export default function LoginPage() {
                 type="email"
                 placeholder="jake@example.com"
                 icon={<Mail className="h-4 w-4" />}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 required
               />
             </div>
@@ -62,6 +97,8 @@ export default function LoginPage() {
                 type="password"
                 placeholder="Enter your password"
                 icon={<Lock className="h-4 w-4" />}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
                 required
               />
             </div>

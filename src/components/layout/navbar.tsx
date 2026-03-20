@@ -2,7 +2,8 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
+import { useSession, signOut } from "next-auth/react"
 import { cn } from "@/lib/utils"
 import { Logo } from "./logo"
 import { useTheme } from "./theme-provider"
@@ -44,7 +45,11 @@ const moreItems = [
 
 export function Navbar() {
   const pathname = usePathname()
+  const router = useRouter()
+  const { data: session } = useSession()
   const { theme, toggleTheme } = useTheme()
+  const userName = session?.user?.name || "User"
+  const userEmail = session?.user?.email || ""
   const [moreOpen, setMoreOpen] = React.useState(false)
   const [profileOpen, setProfileOpen] = React.useState(false)
   const [searchOpen, setSearchOpen] = React.useState(false)
@@ -190,14 +195,14 @@ export function Navbar() {
               onClick={() => setProfileOpen(!profileOpen)}
               className="flex items-center gap-2 rounded-lg p-1 transition-colors hover:bg-accent"
             >
-              <Avatar name="Jake S" size="sm" />
+              <Avatar name={userName} size="sm" />
             </button>
 
             {profileOpen && (
               <div className="absolute right-0 top-full mt-2 w-56 animate-scale-in rounded-xl border border-border bg-popover p-1.5 shadow-xl">
                 <div className="border-b border-border px-3 py-2.5 mb-1.5">
-                  <p className="text-sm font-semibold">Jake S</p>
-                  <p className="text-xs text-muted-foreground">jake@example.com</p>
+                  <p className="text-sm font-semibold">{userName}</p>
+                  <p className="text-xs text-muted-foreground">{userEmail}</p>
                 </div>
                 <Link
                   href="/profile"
@@ -216,7 +221,10 @@ export function Navbar() {
                   <span>Settings</span>
                 </Link>
                 <div className="my-1.5 border-t border-border" />
-                <button className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-destructive transition-colors hover:bg-destructive/10">
+                <button
+                  onClick={() => signOut({ callbackUrl: "/login" })}
+                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-destructive transition-colors hover:bg-destructive/10"
+                >
                   <LogOut className="h-4 w-4" />
                   <span>Sign out</span>
                 </button>

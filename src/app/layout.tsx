@@ -1,6 +1,8 @@
 import type { Metadata } from "next"
 import { Geist, Geist_Mono } from "next/font/google"
 import { ThemeProvider } from "@/components/layout/theme-provider"
+import { SessionProvider } from "@/components/layout/session-provider"
+import { Toaster } from "sonner"
 import "./globals.css"
 
 const geistSans = Geist({
@@ -42,7 +44,17 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="min-h-full bg-background text-foreground antialiased">
-        <ThemeProvider>{children}</ThemeProvider>
+        <SessionProvider>
+          <ThemeProvider>
+            {children}
+            <Toaster
+              position="bottom-right"
+              toastOptions={{
+                className: "border border-border bg-card text-card-foreground shadow-lg",
+              }}
+            />
+          </ThemeProvider>
+        </SessionProvider>
       </body>
     </html>
   )
