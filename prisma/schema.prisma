@@ -1,0 +1,519 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// USERS & AUTH
+// ============================================================================
+
+model User {
+  id                     Int       @id @default(autoincrement())
+  username               String    @unique
+  password               String
+  email                  String    @unique
+  fullName               String?   @map("full_name")
+  createdAt              DateTime  @default(now()) @map("created_at")
+  phone                  String?
+  address                String?
+  theme                  String    @default("light")
+  emailVerified          Boolean   @default(false) @map("email_verified")
+  verificationToken      String?   @map("verification_token")
+  verificationTokenExpires DateTime? @map("verification_token_expires")
+  resetPasswordToken     String?   @map("reset_password_token")
+  resetPasswordExpires   DateTime? @map("reset_password_expires")
+  lastLogin              DateTime? @map("last_login")
+  failedLoginAttempts    Int       @default(0) @map("failed_login_attempts")
+  accountLocked          Boolean   @default(false) @map("account_locked")
+  accountLockedUntil     DateTime? @map("account_locked_until")
+  subscriptionStatus     String    @default("free") @map("subscription_status")
+  subscriptionTier       String    @default("basic") @map("subscription_tier")
+  subscriptionExpiresAt  DateTime? @map("subscription_expires_at")
+  stripeCustomerId       String?   @map("stripe_customer_id")
+  stripeSubscriptionId   String?   @map("stripe_subscription_id")
+  role                   String    @default("user")
+
+  passwordHistory    PasswordHistory[]
+  sessions           Session[]
+  issues             Issue[]
+  legalCases         LegalCase[]
+  aiChatMessages     AiChatMessage[]
+  securityAuditLogs  SecurityAuditLog[]
+  encryptedData      EncryptedData[]
+  signatures         Signature[]
+  publicProfile      PublicUserProfile?
+
+  @@map("users")
+}
+
+model PasswordHistory {
+  id           Int      @id @default(autoincrement())
+  userId       Int      @map("user_id")
+  passwordHash String   @map("password_hash")
+  changedAt    DateTime @default(now()) @map("changed_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_history")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  sid       String   @unique
+  data      String
+  expiresAt DateTime @map("expires_at")
+  userId    Int?     @map("user_id")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("session")
+}
+
+model Permission {
+  id              Int    @id @default(autoincrement())
+  permissionName  String @unique @map("permission_name")
+  description     String?
+  category        String?
+
+  rolePermissions RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  id           Int    @id @default(autoincrement())
+  role         String
+  permissionId Int    @map("permission_id")
+
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([role, permissionId])
+  @@map("role_permissions")
+}
+
+model SecurityAuditLog {
+  id         Int      @id @default(autoincrement())
+  userId     Int?     @map("user_id")
+  action     String
+  details    Json?
+  ipAddress  String?  @map("ip_address")
+  userAgent  String?  @map("user_agent")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@map("security_audit_logs")
+}
+
+model EncryptedData {
+  id             Int      @id @default(autoincrement())
+  userId         Int      @map("user_id")
+  dataType       String   @map("data_type")
+  encryptedValue String   @map("encrypted_value")
+  iv             String
+  tag            String
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("encrypted_data")
+}
+
+// ============================================================================
+// ISSUE TRACKING (CORE)
+// ============================================================================
+
+model Issue {
+  id                   Int      @id @default(autoincrement())
+  userId               Int?     @map("user_id")
+  issueType            String   @map("issue_type")
+  description          String
+  organization         String
+  individual           String?
+  dateOfIncident       String   @map("date_of_incident")
+  timeOfIncident       String?  @map("time_of_incident")
+  location             String
+  status               String   @default("in_progress")
+  evidence             Json[]
+  createdAt            DateTime @default(now()) @map("created_at")
+  isAnonymous          Boolean  @default(false) @map("is_anonymous")
+  hasComplaint         Boolean  @default(false) @map("has_complaint")
+  complaintSent        Boolean  @default(false) @map("complaint_sent")
+  organizationMetadata Json?    @map("organization_metadata")
+  issueCategory        String   @default("Public Sector & Government") @map("issue_category")
+  userRole             String   @default("complainant") @map("user_role")
+
+  user               User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
+  complaints         Complaint[]
+  evidenceItems      EvidenceItem[]
+  legalAnalysis      LegalAnalysis[]
+  aiChatMessages     AiChatMessage[]
+  issueChangeHistory IssueChangeHistory[]
+  legalCases         LegalCase[]
+
+  @@map("issues")
+}
+
+model Complaint {
+  id                Int       @id @default(autoincrement())
+  issueId           Int       @map("issue_id")
+  complaintText     String    @map("complaint_text")
+  complaintFormat   String    @default("formal_letter") @map("complaint_format")
+  recipientName     String?   @map("recipient_name")
+  recipientEmail    String?   @map("recipient_email")
+  recipientAddress  String?   @map("recipient_address")
+  recipientOrg      String?   @map("recipient_org")
+  ccRecipients      Json[]    @map("cc_recipients")
+  status            String    @default("draft")
+  sentAt            DateTime? @map("sent_at")
+  sentVia           String?   @map("sent_via")
+  openedAt          DateTime? @map("opened_at")
+  respondedAt       DateTime? @map("responded_at")
+  responseText      String?   @map("response_text")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  issue Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+
+  @@map("complaints")
+}
+
+model EvidenceItem {
+  id                 Int      @id @default(autoincrement())
+  issueId            Int      @map("issue_id")
+  evidenceType       String   @map("evidence_type")
+  fileName           String?  @map("file_name")
+  fileUrl            String?  @map("file_url")
+  fileSize           Int?     @map("file_size")
+  mimeType           String?  @map("mime_type")
+  description        String?
+  uploadedAt         DateTime @default(now()) @map("uploaded_at")
+  chainOfCustody     Json[]   @map("chain_of_custody")
+  verificationStatus String   @default("pending") @map("verification_status")
+  isAdmissible       Boolean  @default(true) @map("is_admissible")
+  metadata           Json?
+
+  issue Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+
+  @@map("evidence_items")
+}
+
+model LegalAnalysis {
+  id                 Int      @id @default(autoincrement())
+  issueId            Int      @map("issue_id")
+  relevantLaws       Json[]   @map("relevant_laws")
+  rightViolations    Json[]   @map("right_violations")
+  recommendedActions Json[]   @map("recommended_actions")
+  precedents         Json[]
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  issue Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+
+  @@map("legal_analysis")
+}
+
+model AiChatMessage {
+  id        Int      @id @default(autoincrement())
+  issueId   Int      @map("issue_id")
+  userId    Int      @map("user_id")
+  role      String
+  content   String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  issue Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("ai_chat_messages")
+}
+
+model IssueChangeHistory {
+  id         Int      @id @default(autoincrement())
+  issueId    Int      @map("issue_id")
+  fieldName  String   @map("field_name")
+  oldValue   String?  @map("old_value")
+  newValue   String?  @map("new_value")
+  changedBy  Int?     @map("changed_by")
+  changedAt  DateTime @default(now()) @map("changed_at")
+  changeType String   @default("update") @map("change_type")
+
+  issue Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+
+  @@map("issue_change_history")
+}
+
+// ============================================================================
+// LEGAL CASE MANAGEMENT
+// ============================================================================
+
+model LegalCase {
+  id                  Int       @id @default(autoincrement())
+  issueId             Int       @map("issue_id")
+  userId              Int       @map("user_id")
+  caseTitle           String    @map("case_title")
+  caseNumber          String?   @map("case_number")
+  caseType            String    @map("case_type")
+  courtLevel          String?   @map("court_level")
+  courtName           String?   @map("court_name")
+  caseStatus          String    @default("preparation") @map("case_status")
+  filedDate           DateTime? @map("filed_date")
+  hearingDate         DateTime? @map("hearing_date")
+  caseOutcome         String?   @map("case_outcome")
+  outcomeDetails      String?   @map("outcome_details")
+  legalRepresentation String    @default("self") @map("legal_representation")
+  estimatedCosts      Int?      @map("estimated_costs")
+  actualCosts         Int?      @map("actual_costs")
+  caseStrength        Int       @default(5) @map("case_strength")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  issue                Issue                @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  user                 User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  courtDocuments       CourtDocument[]
+  caseTimeline         CaseTimeline[]
+  casePreparationTasks CasePreparationTask[]
+  legalPrecedents      LegalPrecedent[]
+  relevantLegislation  RelevantLegislation[]
+  rightsViolations     RightsViolation[]
+
+  @@map("legal_cases")
+}
+
+model CourtDocument {
+  id               Int       @id @default(autoincrement())
+  caseId           Int       @map("case_id")
+  documentType     String    @map("document_type")
+  documentTitle    String    @map("document_title")
+  documentContent  String?   @map("document_content")
+  fileUrl          String?   @map("file_url")
+  filedDate        DateTime? @map("filed_date")
+  filedBy          String?   @map("filed_by")
+  servedTo         String?   @map("served_to")
+  servedDate       DateTime? @map("served_date")
+  responseDeadline DateTime? @map("response_deadline")
+  responseReceived Boolean   @default(false) @map("response_received")
+  responseDate     DateTime? @map("response_date")
+  status           String    @default("draft")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  legalCase LegalCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@map("court_documents")
+}
+
+model CaseTimeline {
+  id               Int      @id @default(autoincrement())
+  caseId           Int      @map("case_id")
+  eventType        String   @map("event_type")
+  eventTitle       String   @map("event_title")
+  eventDescription String?  @map("event_description")
+  eventDate        DateTime @map("event_date")
+  eventTime        String?  @map("event_time")
+  location         String?
+  participants     Json[]
+  documents        Json[]
+  importance       String   @default("medium")
+  isDeadline       Boolean  @default(false) @map("is_deadline")
+  isCompleted      Boolean  @default(true) @map("is_completed")
+  notes            String?
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  legalCase LegalCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@map("case_timeline")
+}
+
+model CasePreparationTask {
+  id              Int       @id @default(autoincrement())
+  caseId          Int?      @map("case_id")
+  taskCategory    String    @map("task_category")
+  taskTitle       String    @map("task_title")
+  taskDescription String?   @map("task_description")
+  priority        String    @default("medium")
+  deadline        DateTime?
+  isCompleted     Boolean   @default(false) @map("is_completed")
+  completedDate   DateTime? @map("completed_date")
+  estimatedHours  Int?      @map("estimated_hours")
+  actualHours     Int?      @map("actual_hours")
+  assignedTo      String?   @map("assigned_to")
+  dependencies    Json[]
+  resources       Json[]
+  notes           String?
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  legalCase LegalCase? @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@map("case_preparation_tasks")
+}
+
+model LegalPrecedent {
+  id                    Int       @id @default(autoincrement())
+  caseId                Int?      @map("case_id")
+  caseName              String    @map("case_name")
+  caseReference         String    @map("case_reference")
+  court                 String
+  decisionDate          DateTime? @map("decision_date")
+  judges                String[]
+  parties               String
+  legalPrinciple        String    @map("legal_principle")
+  factsOfCase           String?   @map("facts_of_case")
+  reasoning             String?
+  outcome               String?
+  relevanceToCase       String    @map("relevance_to_case")
+  precedentStrength     String    @default("medium") @map("precedent_strength")
+  jurisdiction          String?
+  caseUrl               String?   @map("case_url")
+  keyQuotes             String[]  @map("key_quotes")
+  distinguishingFactors String?   @map("distinguishing_factors")
+  isBinding             Boolean   @default(false) @map("is_binding")
+  citationCount         Int       @default(0) @map("citation_count")
+
+  legalCase LegalCase? @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@map("legal_precedents")
+}
+
+model RelevantLegislation {
+  id                 Int      @id @default(autoincrement())
+  caseId             Int?     @map("case_id")
+  actTitle           String   @map("act_title")
+  actYear            Int?     @map("act_year")
+  specificSections   Json[]   @map("specific_sections")
+  relevantProvisions String?  @map("relevant_provisions")
+  applicationToCase  String?  @map("application_to_case")
+  legislationType    String   @default("primary") @map("legislation_type")
+  jurisdiction       String   @default("England and Wales")
+  url                String?
+  keyDefinitions     Json[]   @map("key_definitions")
+  amendments         Json[]
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  legalCase LegalCase? @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@map("relevant_legislation")
+}
+
+model RightsViolation {
+  id                Int      @id @default(autoincrement())
+  caseId            Int?     @map("case_id")
+  violationType     String   @map("violation_type")
+  description       String
+  severity          String   @default("medium")
+  legislationBreach String?  @map("legislation_breach")
+  evidenceIds       Int[]    @map("evidence_ids")
+  proofStrength     String   @default("medium") @map("proof_strength")
+  remedySought      String?  @map("remedy_sought")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  legalCase LegalCase? @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@map("rights_violations")
+}
+
+// ============================================================================
+// COMMUNITY
+// ============================================================================
+
+model Petition {
+  id           Int       @id @default(autoincrement())
+  title        String
+  description  String
+  category     String?
+  targetOrg    String?   @map("target_org")
+  targetCount  Int       @default(1000) @map("target_count")
+  currentCount Int       @default(0) @map("current_count")
+  status       String    @default("active")
+  createdBy    Int?      @map("created_by")
+  isTrending   Boolean   @default(false) @map("is_trending")
+  isPoll       Boolean   @default(false) @map("is_poll")
+  pollOptions  Json[]    @map("poll_options")
+  keywords     String[]
+  createdAt    DateTime  @default(now()) @map("created_at")
+  expiresAt    DateTime? @map("expires_at")
+
+  signatures Signature[]
+
+  @@map("petitions")
+}
+
+model Signature {
+  id           Int      @id @default(autoincrement())
+  petitionId   Int      @map("petition_id")
+  userId       Int?     @map("user_id")
+  signerName   String?  @map("signer_name")
+  signerEmail  String?  @map("signer_email")
+  comment      String?
+  isAnonymous  Boolean  @default(false) @map("is_anonymous")
+  pollOptionId Int?     @map("poll_option_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  petition Petition @relation(fields: [petitionId], references: [id], onDelete: Cascade)
+  user     User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@map("signatures")
+}
+
+model PublicUserProfile {
+  id          Int      @id @default(autoincrement())
+  userId      Int      @unique @map("user_id")
+  displayName String?  @map("display_name")
+  bio         String?
+  avatarUrl   String?  @map("avatar_url")
+  isPublic    Boolean  @default(false) @map("is_public")
+  badges      Json[]
+  reputation  Int      @default(0)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("public_user_profiles")
+}
+
+// ============================================================================
+// RESOURCES
+// ============================================================================
+
+model Resource {
+  id           Int      @id @default(autoincrement())
+  title        String
+  description  String?
+  content      String?
+  category     String
+  subcategory  String?
+  resourceType String   @default("guide") @map("resource_type")
+  tags         String[]
+  iconName     String?  @map("icon_name")
+  url          String?
+  isFeatured   Boolean  @default(false) @map("is_featured")
+  sortOrder    Int      @default(0) @map("sort_order")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("resources")
+}
+
+model SubmissionTarget {
+  id               Int      @id @default(autoincrement())
+  organizationName String   @map("organization_name")
+  organizationType String   @map("organization_type")
+  department       String?
+  contactEmail     String?  @map("contact_email")
+  contactPhone     String?  @map("contact_phone")
+  contactAddress   String?  @map("contact_address")
+  websiteUrl       String?  @map("website_url")
+  complaintUrl     String?  @map("complaint_url")
+  region           String?
+  jurisdiction     String?
+  responseTimeDays Int?     @map("response_time_days")
+  escalationPath   Json[]   @map("escalation_path")
+  isActive         Boolean  @default(true) @map("is_active")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("submission_targets")
+}
