@@ -12,20 +12,20 @@ const buttonVariants = cva(
         destructive:
           "bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90",
         outline:
-          "border border-border bg-background hover:bg-accent hover:text-accent-foreground",
+          "border border-border bg-card hover:bg-accent hover:text-accent-foreground hover:border-brand-200 dark:hover:border-brand-800",
         secondary:
           "bg-secondary text-secondary-foreground hover:bg-secondary/80",
         ghost: "hover:bg-accent hover:text-accent-foreground",
         link: "text-primary underline-offset-4 hover:underline",
         brand:
-          "bg-gradient-to-r from-brand-500 to-brand-600 text-white shadow-sm hover:from-brand-600 hover:to-brand-700 hover:shadow-md",
+          "bg-gradient-to-r from-brand-500 to-brand-600 text-white shadow-sm hover:from-brand-600 hover:to-brand-700 hover:shadow-lg",
         success:
           "bg-emerald-600 text-white shadow-sm hover:bg-emerald-700",
       },
       size: {
         default: "h-10 px-4 py-2",
         sm: "h-8 rounded-md px-3 text-xs",
-        lg: "h-12 rounded-xl px-6 text-base",
+        lg: "h-12 rounded-xl px-8 text-base",
         xl: "h-14 rounded-xl px-8 text-lg",
         icon: "h-10 w-10",
         "icon-sm": "h-8 w-8",

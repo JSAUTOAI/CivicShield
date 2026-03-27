@@ -43,7 +43,8 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const validated = issueSchema.parse(body)
+    const { organizationMetadata, ...issueFields } = body
+    const validated = issueSchema.parse(issueFields)
 
     const issue = await db.issue.create({
       data: {
@@ -58,6 +59,7 @@ export async function POST(request: Request) {
         location: validated.location,
         userRole: validated.userRole,
         isAnonymous: validated.isAnonymous,
+        organizationMetadata: organizationMetadata || undefined,
         status: "in_progress",
         evidence: [],
       },

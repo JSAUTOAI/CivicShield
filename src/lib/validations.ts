@@ -40,9 +40,19 @@ export const complaintUpdateSchema = z.object({
   recipientEmail: z.string().email().optional(),
   recipientAddress: z.string().optional(),
   recipientOrg: z.string().optional(),
+  truthConfirmed: z.boolean().optional(),
+})
+
+export const dictionarySearchSchema = z.object({
+  search: z.string().optional(),
+  category: z.string().optional(),
+  letter: z.string().max(1).optional(),
+  page: z.coerce.number().min(1).default(1),
+  limit: z.coerce.number().min(1).max(100).default(50),
 })
 
 export type RegisterInput = z.infer<typeof registerSchema>
 export type LoginInput = z.infer<typeof loginSchema>
 export type IssueInput = z.infer<typeof issueSchema>
 export type ComplaintUpdateInput = z.infer<typeof complaintUpdateSchema>
+export type DictionarySearchInput = z.infer<typeof dictionarySearchSchema>

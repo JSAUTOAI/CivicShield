@@ -2,12 +2,16 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { useParams, useRouter } from "next/navigation"
+import { useParams, useSearchParams } from "next/navigation"
+import { toast } from "sonner"
 import { cn } from "@/lib/utils"
+import { useFetch } from "@/lib/hooks"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import type { LegalAnalysisResult } from "@/lib/ai-analysis"
+import { PageSkeleton } from "@/components/ui/loading-skeleton"
+import { EmptyState, ErrorState } from "@/components/ui/empty-state"
+import type { IssueDetail } from "@/lib/types"
 import {
   ArrowLeft,
   Edit,
@@ -27,242 +31,239 @@ import {
   ChevronRight,
   Shield,
   CheckCircle,
+  Copy,
+  Loader2,
 } from "lucide-react"
 
-// Mock data for display — replaced by API call when DB connected
-const mockIssue = {
-  id: 4,
-  issueType: "Bailiff/Enforcement",
-  issueCategory: "Public Sector & Government",
-  description:
-    "a bailiff has trespassed on my property after having implied rights of access removed this bailiff has enter into my home with force and has proceeded to harrass me and cause alram distress and tried to bully me into paying him money i have no writen contract with anyone todo with this debt and i refuse to pay it under duress",
-  organization: "exodus",
-  location: "swansea",
-  dateOfIncident: "12/03/2026",
-  timeOfIncident: "07:00",
+// Types for the JSON stored in legalAnalysis table
+interface StoredViolation {
+  type: string
+  description: string
+  legalResponse: string
+  severity: string
 }
 
-const mockAnalysis: LegalAnalysisResult = {
-  summary:
-    "Defending the rights of the living man under UK legislation and common law",
-  rightsViolations: [
-    {
-      type: "Trespass",
-      description:
-        "If the implied right of access was revoked, any entry onto the property may constitute trespass unless specific legal authority was obtained.",
-      legalResponse:
-        '"I do not consent to this violation of my trespass. Under applicable law, I request that you cease this action immediately and respect my lawful rights."',
-      severity: "high",
-    },
-    {
-      type: "Harassment",
-      description:
-        "The actions of the bailiff could be considered harassment if they involved threatening behavior or caused significant alarm and distress.",
-      legalResponse:
-        '"I do not consent to this violation of my harassment. Under Protection from Harassment Act 1997, I request that you cease this action immediately and respect my lawful rights."',
-      severity: "high",
-    },
-  ],
-  precedents: [
-    {
-      caseName: "Evans v. South Ribble Borough Council [1993]",
-      caseReference: "[1993] QB 426",
-      year: "1993",
-      court: "UK High Court",
-      courtLevel: "High Court",
-      keyPrinciple:
-        "This case dealt with unauthorized entry by enforcement officers, reinforcing the notion that bailiffs must adhere strictly to entry rights and can be held liable for any trespass.",
-      relevance:
-        "Establishes rights protection in similar contexts.",
-      legalDeclaration:
-        '"With reference to the precedent established in Evans, I assert that my rights in this context must be upheld."',
-      isBinding: false,
-    },
-    {
-      caseName: "R v. Bogdal [2011]",
-      caseReference: "R v. Bogdal [2011]",
-      year: "2011",
-      court: "Crown Court",
-      courtLevel: "Crown Court",
-      keyPrinciple:
-        "This case considered harassment by bailiffs and supported the use of the Protection from Harassment Act 1997 in similar circumstances.",
-      relevance: "Directly relevant to harassment claims against enforcement agents.",
-      legalDeclaration:
-        '"As established in R, I assert my right to..."',
-      isBinding: false,
-    },
-    {
-      caseName: "Laporte v Chief Constable of Gloucestershire [2006] UKHL 55",
-      caseReference: "[2006] UKHL 55",
-      year: "2006",
-      court: "House of Lords",
-      courtLevel: "House of Lords",
-      keyPrinciple:
-        "Establishes that police must act proportionately when restricting liberty and freedom of movement.",
-      relevance: "Authorities must act proportionately in restricting rights.",
-      legalDeclaration:
-        '"Police actions restricting my liberty must be proportionate to any legitimate aim."',
-      isBinding: true,
-    },
-    {
-      caseName: "Austin v Commissioner of Police of the Metropolis [2009] UKHL 5",
-      caseReference: "[2009] UKHL 5",
-      year: "2009",
-      court: "House of Lords",
-      courtLevel: "House of Lords",
-      keyPrinciple:
-        "Concerns the lawfulness of containment ('kettling') by police and the threshold for deprivation of liberty.",
-      relevance: "Any restriction of movement by authorities must be justified.",
-      legalDeclaration:
-        '"Any restriction of my movement by authorities must be justified, necessary and proportionate."',
-      isBinding: true,
-    },
-    {
-      caseName: "Javed v British Gas Trading Ltd [2021] EWHC 2682",
-      caseReference: "[2021] EWHC 2682",
-      year: "2021",
-      court: "High Court",
-      courtLevel: "High Court",
-      keyPrinciple:
-        "Concerns the lawfulness of bailiff/enforcement actions and proper notification requirements.",
-      relevance: "Enforcement agents must provide proper notice.",
-      legalDeclaration:
-        '"Enforcement agents must provide proper notice before taking enforcement action."',
-      isBinding: false,
-    },
-    {
-      caseName: "R (Wandsworth LBC) v Magistrates' Court [2003] EWHC 2083",
-      caseReference: "[2003] EWHC 2083",
-      year: "2003",
-      court: "High Court",
-      courtLevel: "High Court",
-      keyPrinciple:
-        "Established principles for warrants of entry and execution by bailiffs.",
-      relevance: "Bailiffs must have proper and valid warrants.",
-      legalDeclaration:
-        '"Bailiffs must have proper and valid warrants before entering my property."',
-      isBinding: false,
-    },
-  ],
-  legislation: [
-    {
-      actTitle: "Tribunals, Courts and Enforcement Act 2007",
-      description:
-        "This Act outlines the powers and responsibilities of enforcement agents (bailiffs), including conduct rules and entry rights.",
-      legalDeclaration:
-        '"I invoke my rights under Tribunals, Courts and Enforcement Act 2007. This legislation clearly establishes that my rights in this matter must be respected."',
-      relevance: "Directly governs bailiff conduct.",
-    },
-    {
-      actTitle: "Protection from Harassment Act 1997",
-      description:
-        "This Act provides protection against harassment and can be applied if a bailiff\'s conduct causes fear, alarm, or distress.",
-      legalDeclaration:
-        '"I invoke my rights under Protection from Harassment Act 1997. This legislation clearly establishes that my rights in this matter must be respected."',
-      relevance: "Applicable where enforcement conduct constitutes harassment.",
-    },
-    {
-      actTitle: "The Taking Control of Goods Regulations 2013",
-      description:
-        "These Regulations stipulate the procedures that bailiffs must follow, including restrictions on forceful entry and conduct standards.",
-      legalDeclaration:
-        '"I invoke my rights under The Taking Control of Goods Regulations 2013. This legislation clearly establishes that my rights in this matter must be respected."',
-      relevance: "Sets out specific procedural rules for bailiffs.",
-    },
-  ],
-  recommendedActions: [
-    {
-      title: "File a Complaint with the Bailiff's Creditor or Agency",
-      description:
-        "To address the misconduct, start by filing a formal complaint with the creditors or the agency that employed the bailiff.",
-      priority: "primary",
-    },
-    {
-      title: "Report to the Police",
-      description:
-        "If you believe criminal acts like trespassing or harassment occurred, report the incident to the police.",
-      priority: "secondary",
-    },
-    {
-      title: "Consult a Solicitor",
-      description:
-        "Consult with a solicitor experienced in civil rights or consumer law to explore potential legal actions against the bailiff.",
-      priority: "secondary",
-    },
-  ],
-  complaintText: `[Your Address]
-[City, Postcode]
-[Date]
+interface StoredPrecedent {
+  caseName: string
+  caseReference: string
+  court: string
+  courtLevel: string
+  keyPrinciple: string
+  relevance: string
+  legalDeclaration: string
+  isBinding: boolean
+  caseUrl?: string
+}
 
-Exodus Enforcement Agency
-[Agency's Address]
-[City, Postcode]
+interface StoredLegislation {
+  actTitle: string
+  description: string
+  legalDeclaration: string
+  relevance?: string
+  url?: string
+}
 
-Dear Sir/Madam,
-
-Subject: Formal Complaint Regarding Bailiff Misconduct and Rights Violation
-
-I am writing to formally register a complaint regarding an incident that took place on 12/03/2026 at approximately 07:00 at my property in Swansea.
-
-A bailiff acting on behalf of your agency trespassed on my property after having implied rights of access removed. The bailiff entered my home with force and proceeded to harass me, cause alarm and distress, and attempted to coerce me into making payment under duress. I have no written contract with any party in relation to this alleged debt and refuse to pay under duress.
-
-This conduct constitutes a breach of my fundamental rights under both statutory and common law. Specifically:
-
-1. The Tribunals, Courts and Enforcement Act 2007 — which sets out the powers and limitations of enforcement agents
-2. The Taking Control of Goods Regulations 2013 — which prescribes the procedures that must be followed
-3. The Protection from Harassment Act 1997 — which prohibits conduct causing alarm or distress
-
-I request that you:
-1. Acknowledge receipt of this complaint within 14 days
-2. Conduct a thorough investigation into the conduct described
-3. Provide a full written response within 28 days
-4. Take appropriate disciplinary action
-5. Confirm measures to prevent similar incidents
-
-I reserve the right to escalate this matter to the relevant regulatory body and to pursue legal action should a satisfactory response not be received.
-
-Yours faithfully,
-
-[Your Name]`,
-  complaintRecipient: {
-    name: "Complaints Department",
-    organization: "Exodus Enforcement Agency",
-    address: "[Agency's Address]",
-  },
-  ccRecipients: [
-    {
-      name: "Civil Enforcement Association",
-      organization: "CIVEA",
-      role: "Industry regulatory body for enforcement agents",
-    },
-  ],
+interface StoredAction {
+  title: string
+  description: string
+  priority: string
+  actionUrl?: string
 }
 
 const courtLevelColors: Record<string, string> = {
-  "House of Lords": "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
-  "Supreme Court": "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
-  "High Court": "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
-  "Court of Appeal": "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300",
-  "Crown Court": "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300",
+  "House of Lords": "bg-purple-600 text-white dark:bg-purple-500 dark:text-white",
+  "Supreme Court": "bg-purple-600 text-white dark:bg-purple-500 dark:text-white",
+  "High Court": "bg-blue-600 text-white dark:bg-blue-500 dark:text-white",
+  "Court of Appeal": "bg-indigo-600 text-white dark:bg-indigo-500 dark:text-white",
+  "Crown Court": "bg-slate-600 text-white dark:bg-slate-500 dark:text-white",
+  "Magistrates Court": "bg-gray-600 text-white dark:bg-gray-500 dark:text-white",
+}
+
+function SourceLink({ href, children }: { href?: string; children: React.ReactNode }) {
+  if (!href) return <>{children}</>
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-1 text-brand-600 hover:text-brand-700 hover:underline dark:text-brand-400 dark:hover:text-brand-300 transition-colors"
+    >
+      {children}
+      <ExternalLink className="h-3 w-3 flex-shrink-0" />
+    </a>
+  )
 }
 
 export default function IssueDetailPage() {
   const params = useParams()
-  const [analysis] = React.useState<LegalAnalysisResult>(mockAnalysis)
-  const [issue] = React.useState(mockIssue)
-  const [complaintText, setComplaintText] = React.useState(mockAnalysis.complaintText)
+  const searchParams = useSearchParams()
+  const issueId = params.id as string
+  const fromCase = searchParams.get("from") === "case"
+  const caseId = searchParams.get("caseId")
+  const { data: response, loading, error, refetch } = useFetch<{ success: boolean; data: IssueDetail }>(`/api/issues/${issueId}`)
+  const issue = response?.data || (response as unknown as IssueDetail)
+  const [complaintText, setComplaintText] = React.useState("")
+  const [analyzing, setAnalyzing] = React.useState(false)
+  const [saving, setSaving] = React.useState(false)
+  const [showSendConfirm, setShowSendConfirm] = React.useState(false)
+  const [truthChecked, setTruthChecked] = React.useState(false)
+  const [creatingCase, setCreatingCase] = React.useState(false)
+
+  // Get the latest analysis and complaint
+  const latestAnalysis = issue?.legalAnalysis?.[0]
+  const latestComplaint = issue?.complaints?.[0]
+  const legalCases = (issue as unknown as { legalCases?: { id: number }[] })?.legalCases || []
+  const hasCase = legalCases.length > 0
+  const existingCaseId = hasCase ? legalCases[0]?.id : null
+
+  // Parse the stored JSON arrays
+  const violations = (latestAnalysis?.rightViolations || []) as unknown as StoredViolation[]
+  const precedents = (latestAnalysis?.precedents || []) as unknown as StoredPrecedent[]
+  const legislation = (latestAnalysis?.relevantLaws || []) as unknown as StoredLegislation[]
+  const actions = (latestAnalysis?.recommendedActions || []) as unknown as StoredAction[]
+
+  // Sync complaint text when data loads
+  React.useEffect(() => {
+    if (latestComplaint?.complaintText && !complaintText) {
+      setComplaintText(latestComplaint.complaintText)
+    }
+  }, [latestComplaint, complaintText])
+
+  async function handleAnalyze() {
+    setAnalyzing(true)
+    try {
+      const res = await fetch(`/api/issues/${issueId}/analyze`, { method: "POST" })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: "Failed" }))
+        if (body.retryExhausted) {
+          toast.error("AI servers are currently experiencing delays. Please try again in a few minutes.")
+        } else {
+          throw new Error(body.error || "Analysis failed")
+        }
+        return
+      }
+      toast.success("Analysis complete! Complaint generated.")
+      refetch()
+    } catch (err) {
+      toast.error((err as Error).message)
+    } finally {
+      setAnalyzing(false)
+    }
+  }
+
+  async function handleSaveComplaint() {
+    if (!latestComplaint) return
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/complaints/${latestComplaint.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ complaintText }),
+      })
+      if (!res.ok) throw new Error("Failed to save")
+      toast.success("Complaint saved")
+    } catch (err) {
+      toast.error((err as Error).message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleSendComplaint() {
+    if (!latestComplaint) return
+    setSaving(true)
+    try {
+      // Save any edits first
+      await fetch(`/api/complaints/${latestComplaint.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ complaintText }),
+      })
+      // Then mark as sent with truth confirmed
+      const res = await fetch(`/api/complaints/${latestComplaint.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "sent", truthConfirmed: true }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: "Failed" }))
+        throw new Error(body.error || "Failed to send")
+      }
+      toast.success("Complaint sent successfully")
+      setShowSendConfirm(false)
+      setTruthChecked(false)
+      refetch()
+    } catch (err) {
+      toast.error((err as Error).message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleOpenCase() {
+    setCreatingCase(true)
+    try {
+      const res = await fetch("/api/cases", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          issueId: parseInt(issueId),
+          caseTitle: `${issue.issueType} — ${issue.organization}`,
+          caseType: "administrative",
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Failed to create case")
+      toast.success("Case created — redirecting...")
+      window.location.href = `/cases/${data.id || data.data?.id}`
+    } catch (err) {
+      toast.error((err as Error).message)
+    } finally {
+      setCreatingCase(false)
+    }
+  }
+
+  async function handleCopyComplaint() {
+    try {
+      await navigator.clipboard.writeText(complaintText)
+      toast.success("Complaint copied to clipboard")
+    } catch {
+      toast.error("Failed to copy")
+    }
+  }
+
+  async function handleDeleteComplaint() {
+    if (!latestComplaint || !confirm("Delete this complaint?")) return
+    try {
+      await fetch(`/api/complaints/${latestComplaint.id}`, { method: "DELETE" })
+      toast.success("Complaint deleted")
+      refetch()
+    } catch {
+      toast.error("Failed to delete")
+    }
+  }
+
+  if (loading) return <div className="mx-auto max-w-5xl px-4 py-10"><PageSkeleton rows={4} /></div>
+  if (error) return <div className="mx-auto max-w-5xl px-4 py-10"><ErrorState message={error} onRetry={refetch} /></div>
+  if (!issue) return <div className="mx-auto max-w-5xl px-4 py-10"><ErrorState message="Issue not found" /></div>
+
+  // If no analysis yet, show the analyze button
+  const hasAnalysis = latestAnalysis && violations.length > 0
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
+    <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
       {/* Header */}
       <div className="mb-6 animate-fade-in">
         <Link
-          href="/issues"
+          href={fromCase && caseId ? `/cases/${caseId}` : "/issues"}
           className="mb-3 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="h-4 w-4" />
+          {fromCase && caseId ? "Back to Case" : ""}
         </Link>
-        <h1 className="text-2xl font-bold text-foreground">Legal Analysis</h1>
+        <h1 className="text-2xl font-bold text-foreground">
+          {hasAnalysis ? "Legal Analysis" : "Issue Details"}
+        </h1>
       </div>
 
       {/* Issue Summary */}
@@ -270,387 +271,474 @@ export default function IssueDetailPage() {
         <CardContent className="p-6">
           <div className="flex items-start justify-between mb-4">
             <div>
-              <h2 className="text-base font-semibold text-foreground">Issue Summary</h2>
+              <h2 className="text-base font-bold text-foreground">Issue Summary</h2>
               <p className="text-xs text-muted-foreground">
-                {issue.issueType} Issue #{params.id}
+                {issue.issueType} Issue #{issue.id}
               </p>
             </div>
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground">
-                <History className="h-4 w-4" />
-                History
-              </Button>
-              <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground">
-                <Edit className="h-4 w-4" />
-                Edit
-              </Button>
-            </div>
+            <Badge variant={issue.status === "resolved" ? "success" : "warning"}>
+              {issue.status.replace("_", " ")}
+            </Badge>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="rounded-lg bg-blue-50 p-4 dark:bg-blue-900/10">
+            <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-700 dark:bg-blue-900/50">
               <div className="flex items-center gap-2 mb-2">
-                <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                <span className="text-xs font-semibold text-blue-700 dark:text-blue-300">
+                <Info className="h-4 w-4 text-blue-600 dark:text-blue-300" />
+                <span className="text-xs font-semibold text-blue-800 dark:text-blue-200">
                   Issue Details
                 </span>
               </div>
-              <p className="text-sm text-blue-800 dark:text-blue-200 leading-relaxed">
+              <p className="text-sm text-foreground leading-relaxed">
                 {issue.description}
               </p>
             </div>
-            <div className="rounded-lg bg-slate-50 p-4 dark:bg-slate-800/50">
+            <div className="rounded-lg border border-border bg-muted p-4">
               <div className="flex items-center gap-2 mb-2">
                 <Briefcase className="h-4 w-4 text-muted-foreground" />
                 <span className="text-xs font-semibold text-foreground">
                   Authority Involved
                 </span>
               </div>
-              <p className="text-sm font-medium">{issue.organization}</p>
+              <p className="text-sm font-medium text-foreground">{issue.organization}</p>
               <p className="text-xs text-muted-foreground mt-1">
-                {issue.dateOfIncident} at {issue.timeOfIncident} — {issue.location}
+                {issue.dateOfIncident}{issue.timeOfIncident ? ` at ${issue.timeOfIncident}` : ""} — {issue.location}
               </p>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Legal Analysis Header */}
-      <div className="mb-6 animate-fade-in" style={{ animationDelay: "0.1s" }}>
-        <h2 className="text-lg font-semibold text-foreground">Legal Analysis</h2>
-        <p className="text-sm text-muted-foreground">{analysis.summary}</p>
-      </div>
-
-      {/* Rights Violations */}
-      <section className="mb-8 animate-fade-in" style={{ animationDelay: "0.15s" }}>
-        <div className="mb-4 flex items-center gap-2">
-          <AlertTriangle className="h-5 w-5 text-red-500" />
-          <h3 className="text-base font-semibold text-foreground">
-            Rights Violations
-          </h3>
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          {analysis.rightsViolations.map((violation) => (
-            <Card
-              key={violation.type}
-              className="border-red-200 bg-red-50/50 dark:border-red-900/30 dark:bg-red-900/5"
-            >
-              <CardContent className="p-5">
-                <h4 className="mb-2 text-sm font-bold text-red-700 dark:text-red-400">
-                  {violation.type}
-                </h4>
-                <p className="mb-3 text-sm text-red-800/80 dark:text-red-300/80 leading-relaxed">
-                  {violation.description}
-                </p>
-                <div>
-                  <p className="text-xs font-semibold text-red-700 dark:text-red-400 mb-1">
-                    Legal Response:
-                  </p>
-                  <p className="text-xs italic text-red-800/70 dark:text-red-300/70 leading-relaxed">
-                    {violation.legalResponse}
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </section>
-
-      {/* Legal Precedents & Case Law */}
-      <section className="mb-8 animate-fade-in" style={{ animationDelay: "0.2s" }}>
-        <div className="mb-4 flex items-center gap-2">
-          <Gavel className="h-5 w-5 text-brand-600 dark:text-brand-400" />
-          <h3 className="text-base font-semibold text-foreground">
-            Legal Precedents & Case Law
-          </h3>
-        </div>
-
-        {/* Legal Framework banner */}
-        <Card className="mb-4 border-emerald-200 bg-emerald-50/50 dark:border-emerald-900/30 dark:bg-emerald-900/5">
-          <CardContent className="p-4">
-            <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 mb-1">
-              Legal Framework:
-            </p>
-            <p className="text-sm text-emerald-800/80 dark:text-emerald-300/80 leading-relaxed">
-              These precedents establish the legal framework protecting your
-              rights. Citing these cases in communications with authorities
-              significantly strengthens your position and demonstrates legal
-              knowledge.
-            </p>
-            <p className="mt-2 flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400">
-              <Info className="h-3.5 w-3.5" />
-              Click on any case name to view full case details
-            </p>
+      {/* No Analysis Yet */}
+      {!hasAnalysis && (
+        <Card className="mb-6">
+          <CardContent className="p-8">
+            <EmptyState
+              icon={Scale}
+              title="No analysis yet"
+              description="Run AI analysis to identify your rights, find legal precedents, and generate a formal complaint letter."
+              actionLabel={analyzing ? "Analysing..." : "Run AI Analysis"}
+              onAction={analyzing ? undefined : handleAnalyze}
+            />
+            {analyzing && (
+              <div className="flex items-center justify-center gap-2 mt-4 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Analysing your issue against UK law...
+              </div>
+            )}
           </CardContent>
         </Card>
+      )}
 
-        {/* Featured first precedent */}
-        {analysis.precedents.length > 0 && (
-          <Card className="mb-4 card-hover">
-            <CardContent className="p-6">
-              <h4 className="mb-2 text-base font-bold text-brand-700 dark:text-brand-400">
-                {analysis.precedents[0].caseName}
-              </h4>
-              <p className="mb-4 text-sm text-muted-foreground leading-relaxed">
-                {analysis.precedents[0].keyPrinciple}
-              </p>
-
-              <div className="grid gap-3 sm:grid-cols-2 mb-4">
-                <div>
-                  <p className="text-xs font-semibold text-foreground">Key Principle</p>
-                  <p className="text-xs text-muted-foreground">{analysis.precedents[0].relevance}</p>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold text-foreground">Jurisdiction</p>
-                  <p className="text-xs text-muted-foreground">{analysis.precedents[0].court}</p>
-                </div>
-              </div>
-
-              <div className="rounded-lg bg-muted/50 p-3 mb-3">
-                <p className="text-xs font-semibold text-foreground mb-1">Legal Declaration Template</p>
-                <p className="text-xs italic text-muted-foreground">
-                  {analysis.precedents[0].legalDeclaration}
-                </p>
-              </div>
-
-              <div className="flex justify-end">
-                <button className="flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-700 dark:text-brand-400">
-                  View Full Case Report
-                  <ExternalLink className="h-3 w-3" />
-                </button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Remaining precedents in grid */}
-        <div className="grid gap-4 sm:grid-cols-2">
-          {analysis.precedents.slice(1).map((precedent) => (
-            <Card key={precedent.caseReference} className="card-hover">
-              <CardContent className="p-5">
-                <div className="flex items-start justify-between mb-2">
-                  <h4 className="text-sm font-bold text-foreground leading-tight">
-                    {precedent.caseName}
-                  </h4>
-                  {courtLevelColors[precedent.courtLevel] && (
-                    <span
-                      className={cn(
-                        "ml-2 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-medium",
-                        courtLevelColors[precedent.courtLevel]
-                      )}
-                    >
-                      {precedent.courtLevel}
-                    </span>
-                  )}
-                </div>
-                <p className="mb-3 text-xs text-muted-foreground leading-relaxed">
-                  {precedent.keyPrinciple}
-                </p>
-                <div className="space-y-1.5 text-xs">
-                  <div>
-                    <span className="font-semibold">Citation: </span>
-                    <span className="text-muted-foreground">{precedent.caseReference}</span>
-                  </div>
-                  <div>
-                    <span className="font-semibold">Legal Response: </span>
-                    <span className="italic text-muted-foreground">
-                      {precedent.legalDeclaration}
-                    </span>
-                  </div>
-                </div>
-                <button className="mt-3 flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-700 dark:text-brand-400">
-                  View Full Case
-                  <ExternalLink className="h-3 w-3" />
-                </button>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </section>
-
-      {/* Relevant Legislation */}
-      <section className="mb-8 animate-fade-in" style={{ animationDelay: "0.25s" }}>
-        <div className="mb-4 flex items-center gap-2">
-          <Scale className="h-5 w-5 text-brand-600 dark:text-brand-400" />
-          <h3 className="text-base font-semibold text-foreground">
-            Relevant Legislation
-          </h3>
-        </div>
-
-        {/* Legal Protection Statement */}
-        <Card className="mb-4 border-red-200 bg-red-50/30 dark:border-red-900/30 dark:bg-red-900/5">
-          <CardContent className="p-4">
-            <p className="text-xs font-semibold text-red-700 dark:text-red-400 mb-1">
-              Legal Protection Statement:
-            </p>
-            <p className="text-sm italic text-red-800/80 dark:text-red-300/80 leading-relaxed">
-              &ldquo;I am aware of my rights under the following legislation and
-              hereby invoke these protections. I request that you proceed in
-              accordance with these laws and respect my rights as a living
-              man/woman.&rdquo;
-            </p>
-          </CardContent>
-        </Card>
-
-        <div className="space-y-3">
-          {analysis.legislation.map((leg) => (
-            <Card key={leg.actTitle} className="card-hover">
-              <CardContent className="p-5">
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-50 dark:bg-brand-900/20">
-                    <BookOpen className="h-4 w-4 text-brand-600 dark:text-brand-400" />
-                  </div>
-                  <h4 className="text-sm font-bold text-foreground">
-                    {leg.actTitle}
-                  </h4>
-                </div>
-                <p className="mb-3 text-xs text-muted-foreground leading-relaxed">
-                  {leg.description}
-                </p>
-                <div className="rounded-lg bg-muted/50 p-3">
-                  <p className="text-xs font-semibold mb-1">Legal Declaration:</p>
-                  <p className="text-xs italic text-muted-foreground">
-                    {leg.legalDeclaration}
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </section>
-
-      {/* Complaint Template */}
-      <section className="mb-8 animate-fade-in" style={{ animationDelay: "0.3s" }}>
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-base font-semibold text-foreground">
-                  Your Complaint Template
-                </h3>
-                <p className="text-xs text-muted-foreground">
-                  Your saved complaint is ready for use
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button variant="ghost" size="sm" className="gap-1.5">
-                  <Trash2 className="h-3.5 w-3.5" />
-                  Delete
-                </Button>
-                <Button variant="ghost" size="sm" className="gap-1.5">
-                  <RefreshCw className="h-3.5 w-3.5" />
-                  Regenerate
-                </Button>
-                <Button variant="ghost" size="sm" className="gap-1.5">
-                  <Save className="h-3.5 w-3.5" />
-                  Save Changes
-                </Button>
-                <Button variant="success" size="sm" className="gap-1.5">
-                  <Briefcase className="h-3.5 w-3.5" />
-                  Build a Case
-                </Button>
-                <Button variant="brand" size="sm" className="gap-1.5">
-                  <Send className="h-3.5 w-3.5" />
-                  Send Complaint
-                </Button>
-              </div>
+      {/* Analysis Results */}
+      {hasAnalysis && (
+        <>
+          {/* Rights Violations */}
+          <section className="mb-8 animate-fade-in" style={{ animationDelay: "0.15s" }}>
+            <div className="mb-4 flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
+              <h3 className="text-lg font-bold text-foreground">
+                Rights Violations
+              </h3>
             </div>
 
-            <textarea
-              value={complaintText}
-              onChange={(e) => setComplaintText(e.target.value)}
-              className="w-full min-h-[400px] rounded-lg border border-border bg-muted/30 p-4 text-sm font-mono leading-relaxed focus:outline-none focus:ring-2 focus:ring-ring resize-y"
-            />
-          </CardContent>
-        </Card>
-      </section>
-
-      {/* Recommended Actions */}
-      <section className="animate-fade-in" style={{ animationDelay: "0.35s" }}>
-        <div className="mb-4">
-          <h3 className="text-base font-semibold text-foreground">
-            Recommended Actions
-          </h3>
-          <p className="text-xs text-muted-foreground">
-            Steps you can take based on this analysis
-          </p>
-        </div>
-
-        <div className="space-y-3">
-          {analysis.recommendedActions.map((action, i) => (
-            <Card
-              key={action.title}
-              className={cn(
-                "card-hover",
-                action.priority === "primary" && "border-emerald-200 dark:border-emerald-900/30"
-              )}
-            >
-              <CardContent className="p-5">
-                <div className="flex items-start gap-3">
-                  {action.priority === "primary" ? (
-                    <CheckCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-emerald-500" />
-                  ) : (
-                    <ChevronRight className="mt-0.5 h-5 w-5 flex-shrink-0 text-muted-foreground" />
-                  )}
-                  <div>
-                    <h4
-                      className={cn(
-                        "text-sm font-semibold",
-                        action.priority === "primary"
-                          ? "text-emerald-700 dark:text-emerald-400"
-                          : "text-foreground"
-                      )}
-                    >
-                      {action.title}
-                    </h4>
-                    <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
-                      {action.description}
+            <div className="grid gap-4 sm:grid-cols-2">
+              {violations.map((violation) => (
+                <Card
+                  key={violation.type}
+                  className="border-red-300 dark:border-red-800/50"
+                >
+                  <CardContent className="p-5">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-red-100 dark:bg-red-800/60">
+                        <AlertTriangle className="h-3.5 w-3.5 text-red-600 dark:text-red-300" />
+                      </span>
+                      <h4 className="text-sm font-bold text-red-700 dark:text-red-200">
+                        {violation.type}
+                      </h4>
+                    </div>
+                    <p className="mb-3 text-sm text-foreground leading-relaxed">
+                      {violation.description}
                     </p>
-                    {action.priority === "primary" && (
-                      <Button variant="brand" size="sm" className="mt-3 gap-1.5">
-                        <RefreshCw className="h-3.5 w-3.5" />
-                        Regenerate Complaint Template
-                      </Button>
-                    )}
-                    {action.priority === "secondary" && (
-                      <button className="mt-2 text-xs font-medium text-brand-600 hover:text-brand-700 dark:text-brand-400">
-                        {action.title.includes("Police")
-                          ? "Reporting a crime to the police"
-                          : "Finding a solicitor"}{" "}
-                        <ExternalLink className="inline h-3 w-3" />
-                      </button>
-                    )}
-                  </div>
-                </div>
+                    <div className="rounded-lg bg-red-50 p-3 dark:bg-red-900/50">
+                      <p className="text-xs font-semibold text-red-800 dark:text-red-200 mb-1">
+                        Legal Response:
+                      </p>
+                      <p className="text-xs italic text-foreground leading-relaxed">
+                        {violation.legalResponse}
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </section>
+
+          {/* Legal Precedents & Case Law */}
+          <section className="mb-8 animate-fade-in" style={{ animationDelay: "0.2s" }}>
+            <div className="mb-4 flex items-center gap-2">
+              <Gavel className="h-5 w-5 text-brand-600 dark:text-brand-400" />
+              <h3 className="text-lg font-bold text-foreground">
+                Legal Precedents & Case Law
+              </h3>
+            </div>
+
+            <Card className="mb-4 border-emerald-300 bg-emerald-50 dark:border-emerald-700 dark:bg-emerald-900/50">
+              <CardContent className="p-4">
+                <p className="text-xs font-semibold text-emerald-800 dark:text-emerald-200 mb-1">
+                  Legal Framework:
+                </p>
+                <p className="text-sm text-foreground leading-relaxed">
+                  These precedents establish the legal framework protecting your
+                  rights. Citing these cases in communications with authorities
+                  significantly strengthens your position.
+                </p>
               </CardContent>
             </Card>
-          ))}
-        </div>
 
-        {/* Additional Steps */}
-        <div className="mt-6 space-y-2">
-          <h4 className="text-sm font-semibold text-foreground">Additional Steps</h4>
-          <div className="space-y-1.5 text-sm text-muted-foreground">
-            <p className="flex items-start gap-2">
-              <ChevronRight className="mt-0.5 h-4 w-4 flex-shrink-0" />
-              If you believe criminal acts like trespassing or harassment occurred, report the incident to the police.
-              <br />
-              <a href="#" className="text-brand-600 hover:underline dark:text-brand-400">
-                Reporting a crime to the police <ExternalLink className="inline h-3 w-3" />
-              </a>
-            </p>
-            <p className="flex items-start gap-2">
-              <ChevronRight className="mt-0.5 h-4 w-4 flex-shrink-0" />
-              Consult with a solicitor experienced in civil rights or consumer law to explore potential legal actions.
-              <br />
-              <a href="#" className="text-brand-600 hover:underline dark:text-brand-400">
-                Finding a solicitor <ExternalLink className="inline h-3 w-3" />
-              </a>
-            </p>
+            {/* Featured first precedent */}
+            {precedents.length > 0 && (
+              <Card className="mb-4 card-hover">
+                <CardContent className="p-6">
+                  <h4 className="mb-2 text-base font-bold text-brand-700 dark:text-brand-400">
+                    <SourceLink href={precedents[0].caseUrl}>{precedents[0].caseName}</SourceLink>
+                  </h4>
+                  <p className="mb-4 text-sm text-foreground leading-relaxed">
+                    {precedents[0].keyPrinciple}
+                  </p>
+                  <div className="grid gap-3 sm:grid-cols-2 mb-4">
+                    <div>
+                      <p className="text-xs font-semibold text-foreground">Key Principle</p>
+                      <p className="text-xs text-foreground">{precedents[0].relevance}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-foreground">Jurisdiction</p>
+                      <p className="text-xs text-foreground">{precedents[0].court}</p>
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-border bg-muted p-3">
+                    <p className="text-xs font-semibold text-foreground mb-1">Legal Declaration Template</p>
+                    <p className="text-xs italic text-foreground">
+                      {precedents[0].legalDeclaration}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              {precedents.slice(1).map((precedent) => (
+                <Card key={precedent.caseReference} className="card-hover">
+                  <CardContent className="p-5">
+                    <div className="flex items-start justify-between mb-2">
+                      <h4 className="text-sm font-bold text-foreground leading-tight">
+                        <SourceLink href={precedent.caseUrl}>{precedent.caseName}</SourceLink>
+                      </h4>
+                      {courtLevelColors[precedent.courtLevel] && (
+                        <span
+                          className={cn(
+                            "ml-2 whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold shadow-sm",
+                            courtLevelColors[precedent.courtLevel]
+                          )}
+                        >
+                          {precedent.courtLevel}
+                        </span>
+                      )}
+                    </div>
+                    <p className="mb-3 text-xs text-foreground leading-relaxed">
+                      {precedent.keyPrinciple}
+                    </p>
+                    <div className="space-y-1.5 text-xs">
+                      <div>
+                        <span className="font-semibold text-foreground">Citation: </span>
+                        <span className="text-foreground">{precedent.caseReference}</span>
+                      </div>
+                      <div>
+                        <span className="font-semibold text-foreground">Legal Response: </span>
+                        <span className="italic text-foreground">
+                          {precedent.legalDeclaration}
+                        </span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </section>
+
+          {/* Relevant Legislation */}
+          <section className="mb-8 animate-fade-in" style={{ animationDelay: "0.25s" }}>
+            <div className="mb-4 flex items-center gap-2">
+              <Scale className="h-5 w-5 text-brand-600 dark:text-brand-400" />
+              <h3 className="text-lg font-bold text-foreground">
+                Relevant Legislation
+              </h3>
+            </div>
+
+            <Card className="mb-4 border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-900/50">
+              <CardContent className="p-4">
+                <p className="text-xs font-semibold text-amber-800 dark:text-amber-200 mb-1">
+                  Legal Protection Statement:
+                </p>
+                <p className="text-sm italic text-foreground leading-relaxed">
+                  &ldquo;I am aware of my rights under the following legislation and
+                  hereby invoke these protections. I request that you proceed in
+                  accordance with these laws and respect my rights as a living
+                  man/woman.&rdquo;
+                </p>
+              </CardContent>
+            </Card>
+
+            <div className="space-y-3">
+              {legislation.map((leg) => (
+                <Card key={leg.actTitle} className="card-hover">
+                  <CardContent className="p-5">
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-100 dark:bg-brand-800/50">
+                        <BookOpen className="h-4 w-4 text-brand-600 dark:text-brand-300" />
+                      </div>
+                      <h4 className="text-sm font-bold text-foreground">
+                        <SourceLink href={leg.url}>{leg.actTitle}</SourceLink>
+                      </h4>
+                    </div>
+                    <p className="mb-3 text-sm text-foreground leading-relaxed">
+                      {leg.description}
+                    </p>
+                    <div className="rounded-lg border border-border bg-muted p-3">
+                      <p className="text-xs font-semibold text-foreground mb-1">Legal Declaration:</p>
+                      <p className="text-xs italic text-foreground">
+                        {leg.legalDeclaration}
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </section>
+
+          {/* Open Case Button */}
+          {latestAnalysis && (
+            <section className="mb-8 animate-fade-in" style={{ animationDelay: "0.25s" }}>
+              {hasCase ? (
+                <Link href={`/cases/${existingCaseId}`}>
+                  <Button variant="outline" className="w-full gap-2 py-6 text-base">
+                    <Briefcase className="h-5 w-5" />
+                    View Case Manager
+                  </Button>
+                </Link>
+              ) : (
+                <Button
+                  variant="brand"
+                  className="w-full gap-2 py-6 text-base"
+                  onClick={handleOpenCase}
+                  disabled={creatingCase}
+                >
+                  {creatingCase ? (
+                    <><Loader2 className="h-5 w-5 animate-spin" /> Creating Case...</>
+                  ) : (
+                    <><Briefcase className="h-5 w-5" /> Open Case Manager</>
+                  )}
+                </Button>
+              )}
+            </section>
+          )}
+
+          {/* Complaint Template */}
+          {latestComplaint && (
+            <section className="mb-8 animate-fade-in" style={{ animationDelay: "0.3s" }}>
+              <Card>
+                <CardContent className="p-6">
+                  <div className="mb-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-base font-bold text-foreground">
+                          Your Complaint
+                        </h3>
+                        <p className="text-xs text-muted-foreground">
+                          {latestComplaint.status === "sent"
+                            ? `Sent on ${new Date(latestComplaint.sentAt!).toLocaleDateString("en-GB")}`
+                            : "Draft — edit and send when ready"}
+                        </p>
+                      </div>
+                      {latestComplaint.status === "sent" && (
+                        <Badge variant="success" className="gap-1">
+                          <CheckCircle className="h-3 w-3" />
+                          Sent
+                        </Badge>
+                      )}
+                    </div>
+
+                    {/* Action buttons — wrap on mobile */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button variant="ghost" size="sm" className="gap-1.5" onClick={handleCopyComplaint}>
+                        <Copy className="h-3.5 w-3.5" />
+                        <span className="hidden sm:inline">Copy</span>
+                      </Button>
+                      <Button variant="ghost" size="sm" className="gap-1.5" onClick={handleDeleteComplaint}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                        <span className="hidden sm:inline">Delete</span>
+                      </Button>
+                      <Button variant="ghost" size="sm" className="gap-1.5" onClick={handleAnalyze} disabled={analyzing}>
+                        <RefreshCw className={cn("h-3.5 w-3.5", analyzing && "animate-spin")} />
+                        <span className="hidden sm:inline">Regenerate</span>
+                      </Button>
+                      {latestComplaint.status === "draft" && (
+                        <>
+                          <Button variant="outline" size="sm" className="gap-1.5" onClick={handleSaveComplaint} disabled={saving}>
+                            <Save className="h-3.5 w-3.5" />
+                            Save
+                          </Button>
+                          <Button variant="brand" size="sm" className="gap-1.5" onClick={() => { setShowSendConfirm(true); setTruthChecked(false) }} disabled={saving}>
+                            <Send className="h-3.5 w-3.5" />
+                            <span className="hidden sm:inline">Send Complaint</span>
+                            <span className="sm:hidden">Send</span>
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {latestComplaint.recipientOrg && (
+                    <div className="mb-4 rounded-lg bg-muted/50 p-3 text-xs">
+                      <span className="font-semibold">To: </span>
+                      {latestComplaint.recipientName && `${latestComplaint.recipientName}, `}
+                      {latestComplaint.recipientOrg}
+                      {latestComplaint.recipientEmail && ` (${latestComplaint.recipientEmail})`}
+                    </div>
+                  )}
+
+                  <textarea
+                    value={complaintText}
+                    onChange={(e) => setComplaintText(e.target.value)}
+                    readOnly={latestComplaint.status === "sent"}
+                    className="w-full min-h-[400px] rounded-lg border border-border bg-muted/30 p-4 text-sm font-mono leading-relaxed focus:outline-none focus:ring-2 focus:ring-ring resize-y disabled:opacity-50"
+                  />
+                </CardContent>
+              </Card>
+            </section>
+          )}
+
+          {/* Recommended Actions */}
+          {actions.length > 0 && (
+            <section className="animate-fade-in" style={{ animationDelay: "0.35s" }}>
+              <div className="mb-4">
+                <h3 className="text-lg font-bold text-foreground">
+                  Recommended Actions
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  Steps you can take based on this analysis
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                {actions.map((action) => (
+                  <Card
+                    key={action.title}
+                    className={cn(
+                      "card-hover",
+                      action.priority === "primary" && "border-emerald-200 dark:border-emerald-900/30"
+                    )}
+                  >
+                    <CardContent className="p-5">
+                      <div className="flex items-start gap-3">
+                        {action.priority === "primary" ? (
+                          <CheckCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-emerald-500" />
+                        ) : (
+                          <ChevronRight className="mt-0.5 h-5 w-5 flex-shrink-0 text-muted-foreground" />
+                        )}
+                        <div>
+                          <h4
+                            className={cn(
+                              "text-sm font-semibold",
+                              action.priority === "primary"
+                                ? "text-emerald-700 dark:text-emerald-400"
+                                : "text-foreground"
+                            )}
+                          >
+                            <SourceLink href={action.actionUrl}>{action.title}</SourceLink>
+                          </h4>
+                          <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
+                            {action.description}
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </section>
+          )}
+        </>
+      )}
+
+      {/* Statement of Truth Modal */}
+      {showSendConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="mx-4 w-full max-w-md rounded-xl border border-border bg-background p-6 shadow-xl animate-scale-in">
+            <div className="flex items-start justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-amber-500" />
+                <h3 className="text-lg font-semibold">Confirm & Send</h3>
+              </div>
+              <button
+                onClick={() => { setShowSendConfirm(false); setTruthChecked(false) }}
+                className="rounded-md p-1 text-muted-foreground hover:text-foreground"
+              >
+                <span className="sr-only">Close</span>
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800/50 dark:bg-amber-900/10">
+              <p className="text-sm text-foreground leading-relaxed">
+                This complaint will be sent via email to the recipient on your behalf.
+                Please ensure you have read the complaint in full and verified all
+                information, including legislation and case law references.
+              </p>
+            </div>
+
+            <label className="mt-4 flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={truthChecked}
+                onChange={(e) => setTruthChecked(e.target.checked)}
+                className="mt-1 h-4 w-4 rounded border-border accent-brand-500"
+              />
+              <span className="text-sm text-foreground leading-relaxed">
+                I confirm I have read this complaint in full and believe the information
+                to be true and accurate. I understand CivicShield provides tools and
+                information, not legal advice.
+              </span>
+            </label>
+
+            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => { setShowSendConfirm(false); setTruthChecked(false) }}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="brand"
+                size="sm"
+                className="gap-1.5"
+                disabled={!truthChecked || saving}
+                onClick={handleSendComplaint}
+              >
+                {saving ? (
+                  <>Sending...</>
+                ) : (
+                  <>
+                    <Send className="h-3.5 w-3.5" />
+                    Send Complaint
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         </div>
-      </section>
+      )}
     </div>
   )
 }

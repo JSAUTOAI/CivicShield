@@ -1,6 +1,36 @@
 // AI Legal Analysis Engine — powered by Claude API
 // Analyzes issues against UK law and generates structured legal analysis
 
+import { resolveSourceUrl } from "./legal-sources"
+
+/**
+ * Fetch with automatic retry for transient errors (HTTP 529 overloaded).
+ * Retries up to 3 times with increasing delays: 5s, 15s, 30s.
+ * Non-529 errors are not retried.
+ */
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  maxRetries = 3,
+  delays = [5000, 15000, 30000]
+): Promise<Response> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const response = await fetch(url, options)
+
+    if (response.status === 529 && attempt < maxRetries) {
+      const delay = delays[attempt] || delays[delays.length - 1]
+      console.log(`Claude API overloaded (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${delay / 1000}s...`)
+      await new Promise((resolve) => setTimeout(resolve, delay))
+      continue
+    }
+
+    return response
+  }
+
+  // Should not reach here, but safety net
+  throw new Error("AI service is currently overloaded. Please try again in a few minutes.")
+}
+
 export interface RightsViolation {
   type: string
   description: string
@@ -26,6 +56,7 @@ export interface LegislationResult {
   description: string
   legalDeclaration: string
   relevance: string
+  url?: string
 }
 
 export interface RecommendedAction {
@@ -74,6 +105,10 @@ IMPORTANT GUIDELINES:
 - Include legal declaration templates the person can use
 - Be thorough but accessible — explain legal concepts in plain English
 - Always consider: Human Rights Act 1998, common law rights, natural law principles
+- For each legislation item, include a "url" field with the legislation.gov.uk URL using pattern: https://www.legislation.gov.uk/ukpga/YEAR/CHAPTER for Acts, https://www.legislation.gov.uk/uksi/YEAR/NUMBER for Statutory Instruments
+- For each case law precedent, include a "caseUrl" field with the National Archives URL: https://caselaw.nationalarchives.gov.uk/COURT/YEAR/NUMBER (court abbreviations: ukhl, uksc, ewhc, ewca/civ, ewca/crim)
+- For each recommended action, include an "actionUrl" field linking to the relevant regulatory body's complaints page (e.g. policeconduct.gov.uk, sra.org.uk, lgo.org.uk, ico.org.uk, gov.uk)
+- Only use URLs from authoritative domains: legislation.gov.uk, bailii.org, caselaw.nationalarchives.gov.uk, gov.uk, policeconduct.gov.uk, sra.org.uk, lgo.org.uk, ico.org.uk
 
 RESPOND IN VALID JSON matching this exact structure:
 {
@@ -96,6 +131,7 @@ RESPOND IN VALID JSON matching this exact structure:
       "keyPrinciple": "The key legal principle established",
       "relevance": "How this applies to the current issue",
       "legalDeclaration": "A legal declaration template citing this case",
+      "caseUrl": "https://caselaw.nationalarchives.gov.uk/... or https://www.bailii.org/...",
       "isBinding": true/false
     }
   ],
@@ -104,17 +140,19 @@ RESPOND IN VALID JSON matching this exact structure:
       "actTitle": "Full act name with year",
       "description": "What this act covers and why it's relevant",
       "legalDeclaration": "A legal declaration invoking this legislation",
-      "relevance": "How specifically it applies"
+      "relevance": "How specifically it applies",
+      "url": "https://www.legislation.gov.uk/ukpga/YEAR/CHAPTER"
     }
   ],
   "recommendedActions": [
     {
       "title": "Action title",
       "description": "What to do and why",
-      "priority": "primary|secondary"
+      "priority": "primary|secondary",
+      "actionUrl": "https://relevant-body.org.uk/complaints"
     }
   ],
-  "complaintText": "The full formal complaint letter text with [Your Name], [Your Address] etc. placeholders",
+  "complaintText": "The full formal complaint letter. Use the complainant's REAL name, email, address, and phone if provided — do NOT use placeholders like [Your Name] when real details are available. Address it to the correct complaints department at the organisation. Include today's date. The letter must be professional, solicitor-grade, reference specific legislation and case law from your analysis, and demand acknowledgement within 14 days and a full response within 28 days.",
   "complaintRecipient": {
     "name": "Recipient name or title",
     "organization": "Organization name",
@@ -140,13 +178,32 @@ export async function analyzeIssue(issue: {
   timeOfIncident?: string | null
   location: string
   userRole: string
+  complainantName?: string | null
+  complainantEmail?: string | null
+  complainantAddress?: string | null
+  complainantPhone?: string | null
+  organizationMetadata?: {
+    contactEmail?: string | null
+    contactAddress?: string | null
+    contactPhone?: string | null
+    websiteUrl?: string | null
+    complaintUrl?: string | null
+    department?: string | null
+  } | null
 }): Promise<LegalAnalysisResult> {
   const apiKey = process.env.ANTHROPIC_API_KEY
 
   if (!apiKey) {
-    // Return a structured mock response for development
-    return getMockAnalysis(issue)
+    // Return a structured mock response for development (with enriched URLs)
+    return enrichWithVerifiedUrls(getMockAnalysis(issue))
   }
+
+  const complainantDetails = [
+    issue.complainantName ? `NAME: ${issue.complainantName}` : null,
+    issue.complainantEmail ? `EMAIL: ${issue.complainantEmail}` : null,
+    issue.complainantAddress ? `ADDRESS: ${issue.complainantAddress}` : null,
+    issue.complainantPhone ? `PHONE: ${issue.complainantPhone}` : null,
+  ].filter(Boolean).join("\n")
 
   const userMessage = `Analyze this civic rights issue reported by a UK citizen:
 
@@ -154,15 +211,34 @@ ISSUE CATEGORY: ${issue.issueCategory}
 SPECIFIC TYPE: ${issue.issueType}
 DESCRIPTION: ${issue.description}
 ORGANIZATION INVOLVED: ${issue.organization}
-${issue.individual ? `INDIVIDUAL: ${issue.individual}` : ""}
-DATE: ${issue.dateOfIncident}
-${issue.timeOfIncident ? `TIME: ${issue.timeOfIncident}` : ""}
+${issue.individual ? `INDIVIDUAL INVOLVED: ${issue.individual}` : ""}
+${issue.organizationMetadata ? `
+VERIFIED ORGANISATION CONTACT DETAILS:
+${issue.organizationMetadata.department ? `Department: ${issue.organizationMetadata.department}` : ""}
+${issue.organizationMetadata.contactEmail ? `Email: ${issue.organizationMetadata.contactEmail}` : ""}
+${issue.organizationMetadata.contactAddress ? `Address: ${issue.organizationMetadata.contactAddress}` : ""}
+${issue.organizationMetadata.contactPhone ? `Phone: ${issue.organizationMetadata.contactPhone}` : ""}
+${issue.organizationMetadata.websiteUrl ? `Website: ${issue.organizationMetadata.websiteUrl}` : ""}
+${issue.organizationMetadata.complaintUrl ? `Complaints URL: ${issue.organizationMetadata.complaintUrl}` : ""}
+IMPORTANT: Use these verified contact details in the complaint letter. Do NOT guess or fabricate addresses.
+`.trim() : ""}
+DATE OF INCIDENT: ${issue.dateOfIncident}
+${issue.timeOfIncident ? `TIME OF INCIDENT: ${issue.timeOfIncident}` : ""}
 LOCATION: ${issue.location}
 ROLE: ${issue.userRole}
 
-Provide a full legal analysis with rights violations, precedents, legislation, complaint letter, and recommended actions. The complaint should be addressed to the correct department/person at ${issue.organization} and CC the appropriate oversight body.`
+COMPLAINANT DETAILS:
+${complainantDetails || "Not provided — use [Your Name], [Your Address] etc. placeholders"}
 
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
+Provide a full legal analysis with:
+1. Rights violations identified with severity ratings
+2. Relevant UK case law precedents with accurate citations
+3. Applicable UK legislation
+4. A complete, professional, solicitor-grade formal complaint letter addressed to the correct complaints department at ${issue.organization}. Use the complainant's real details if provided. Research and include the most likely complaints department address and email for ${issue.organization}.
+5. CC recipients — identify the correct oversight/regulatory body for this type of complaint
+6. Recommended actions the complainant should take`
+
+  const response = await fetchWithRetry("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -196,7 +272,31 @@ Provide a full legal analysis with rights violations, precedents, legislation, c
     throw new Error("Could not parse AI response as JSON")
   }
 
-  return JSON.parse(jsonMatch[0]) as LegalAnalysisResult
+  const parsed = JSON.parse(jsonMatch[0]) as LegalAnalysisResult
+  return enrichWithVerifiedUrls(parsed)
+}
+
+/** Post-process AI response to validate/enhance URLs via the static registry */
+function enrichWithVerifiedUrls(result: LegalAnalysisResult): LegalAnalysisResult {
+  // Enrich legislation URLs
+  result.legislation = result.legislation.map((leg) => ({
+    ...leg,
+    url: resolveSourceUrl({ type: "legislation", title: leg.actTitle, aiGeneratedUrl: leg.url }) ?? undefined,
+  }))
+
+  // Enrich precedent URLs
+  result.precedents = result.precedents.map((p) => ({
+    ...p,
+    caseUrl: resolveSourceUrl({ type: "case", title: p.caseName, reference: p.caseReference, aiGeneratedUrl: p.caseUrl }) ?? undefined,
+  }))
+
+  // Enrich recommended action URLs
+  result.recommendedActions = result.recommendedActions.map((a) => ({
+    ...a,
+    actionUrl: resolveSourceUrl({ type: "action", title: a.title, aiGeneratedUrl: a.actionUrl }) ?? undefined,
+  }))
+
+  return result
 }
 
 // Development mock — provides realistic analysis structure

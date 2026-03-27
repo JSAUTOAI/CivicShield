@@ -58,6 +58,18 @@ export default function NewIssuePage() {
   })
   const [uploadedFiles, setUploadedFiles] = React.useState<File[]>([])
   const [isDragOver, setIsDragOver] = React.useState(false)
+  const [orgSearching, setOrgSearching] = React.useState(false)
+  const [orgDetails, setOrgDetails] = React.useState<{
+    organizationName: string
+    organizationType: string
+    department: string | null
+    contactEmail: string | null
+    contactPhone: string | null
+    contactAddress: string | null
+    websiteUrl: string | null
+    complaintUrl: string | null
+    responseTimeDays: number | null
+  } | null>(null)
 
   const issueTypeOptions: SelectOption[] = formData.category
     ? (ISSUE_CATEGORIES[formData.category as IssueCategory] || []).map((t) => ({
@@ -86,7 +98,7 @@ export default function NewIssuePage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
+    <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 lg:px-8">
       {/* Header */}
       <div className="mb-8 text-center animate-fade-in">
         <Link
@@ -107,7 +119,7 @@ export default function NewIssuePage() {
               key={step}
               onClick={() => i <= currentStep && setCurrentStep(i)}
               className={cn(
-                "text-sm font-medium transition-colors",
+                "text-xs sm:text-sm font-medium transition-colors",
                 i === currentStep
                   ? "text-brand-600 dark:text-brand-400"
                   : i < currentStep
@@ -185,7 +197,7 @@ export default function NewIssuePage() {
                   <label className="mb-2 block text-sm font-semibold text-foreground">
                     Organization Involved
                   </label>
-                  <div className="flex gap-2">
+                  <div className="flex flex-col gap-2 sm:flex-row">
                     <Input
                       placeholder="E.g., Greenfield Council, Thames Valley Police"
                       value={formData.organization}
@@ -194,9 +206,37 @@ export default function NewIssuePage() {
                       }
                       className="flex-1"
                     />
-                    <Button variant="outline" size="default" className="gap-1.5 whitespace-nowrap">
+                    <Button
+                      variant="outline"
+                      size="default"
+                      className="gap-1.5 whitespace-nowrap"
+                      disabled={orgSearching || !formData.organization.trim()}
+                      onClick={async () => {
+                        if (!formData.organization.trim()) return
+                        setOrgSearching(true)
+                        setOrgDetails(null)
+                        try {
+                          const res = await fetch("/api/organisations/search", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ organizationName: formData.organization }),
+                          })
+                          const data = await res.json()
+                          if (data.success && data.data) {
+                            setOrgDetails(data.data)
+                            toast.success(data.data.cached ? "Organisation details found (cached)" : "Organisation details found!")
+                          } else {
+                            toast.error(data.error || "Could not find details for this organisation")
+                          }
+                        } catch {
+                          toast.error("Failed to search for organisation")
+                        } finally {
+                          setOrgSearching(false)
+                        }
+                      }}
+                    >
                       <Search className="h-4 w-4" />
-                      Find details
+                      {orgSearching ? "Searching..." : "Find details"}
                     </Button>
                   </div>
                 </div>
@@ -213,6 +253,53 @@ export default function NewIssuePage() {
                   />
                 </div>
               </div>
+
+              {/* Organisation Details Card */}
+              {orgDetails && (
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50/30 p-4 dark:border-emerald-800/30 dark:bg-emerald-900/10">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                      <CheckCircle className="h-4 w-4 text-emerald-500" />
+                      Organisation Details Found
+                    </h4>
+                    <button
+                      type="button"
+                      onClick={() => setOrgDetails(null)}
+                      className="text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  <div className="grid gap-1.5 text-sm">
+                    {orgDetails.contactEmail && (
+                      <p><span className="text-muted-foreground">Email:</span> {orgDetails.contactEmail}</p>
+                    )}
+                    {orgDetails.contactAddress && (
+                      <p><span className="text-muted-foreground">Address:</span> {orgDetails.contactAddress}</p>
+                    )}
+                    {orgDetails.contactPhone && (
+                      <p><span className="text-muted-foreground">Phone:</span> {orgDetails.contactPhone}</p>
+                    )}
+                    {orgDetails.websiteUrl && (
+                      <p><span className="text-muted-foreground">Website:</span>{" "}
+                        <a href={orgDetails.websiteUrl} target="_blank" rel="noopener noreferrer" className="text-brand-600 hover:underline dark:text-brand-400">
+                          {orgDetails.websiteUrl}
+                        </a>
+                      </p>
+                    )}
+                    {orgDetails.complaintUrl && (
+                      <p><span className="text-muted-foreground">Complaints Page:</span>{" "}
+                        <a href={orgDetails.complaintUrl} target="_blank" rel="noopener noreferrer" className="text-brand-600 hover:underline dark:text-brand-400">
+                          {orgDetails.complaintUrl}
+                        </a>
+                      </p>
+                    )}
+                    {orgDetails.responseTimeDays && (
+                      <p><span className="text-muted-foreground">Expected Response:</span> {orgDetails.responseTimeDays} days</p>
+                    )}
+                  </div>
+                </div>
+              )}
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
@@ -266,7 +353,7 @@ export default function NewIssuePage() {
                 onDragLeave={() => setIsDragOver(false)}
                 onDrop={handleDrop}
                 className={cn(
-                  "flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-12 transition-all duration-200",
+                  "flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-6 sm:p-12 transition-all duration-200",
                   isDragOver
                     ? "border-brand-400 bg-brand-50/50 dark:border-brand-600 dark:bg-brand-900/10"
                     : "border-border hover:border-brand-300 dark:hover:border-brand-700"
@@ -435,7 +522,7 @@ export default function NewIssuePage() {
               </h2>
               <p className="mt-2 text-sm text-muted-foreground">
                 {submitting
-                  ? "Our AI is reviewing your issue against UK legislation, case law, and relevant regulations. This typically takes 10-30 seconds."
+                  ? "Our AI is reviewing your issue against UK legislation, case law, and relevant regulations. This typically takes 10-60 seconds. If servers are busy, retries happen automatically."
                   : "Click Submit and Analyze to begin the AI legal analysis."}
               </p>
             </div>
@@ -483,6 +570,7 @@ export default function NewIssuePage() {
                       location: formData.location,
                       userRole: formData.role,
                       isAnonymous: formData.isAnonymous,
+                      organizationMetadata: orgDetails || undefined,
                     }),
                   })
 
@@ -499,7 +587,12 @@ export default function NewIssuePage() {
                   })
 
                   if (!analysisRes.ok) {
-                    toast.error("Issue saved but analysis failed. You can retry from the issue page.")
+                    const analysisBody = await analysisRes.json().catch(() => ({}))
+                    if (analysisBody.retryExhausted) {
+                      toast.error("AI servers are currently experiencing delays. Your issue has been saved — you can retry analysis from the issue page.")
+                    } else {
+                      toast.error("Issue saved but analysis failed. You can retry from the issue page.")
+                    }
                     router.push(`/issues/${issue.id}`)
                     return
                   }
@@ -517,7 +610,8 @@ export default function NewIssuePage() {
             }}
             className="gap-2"
           >
-            {currentStep === 2 ? "Submit and Analyze" : `Next: ${steps[currentStep + 1]}`}
+            <span className="hidden sm:inline">{currentStep === 2 ? "Submit and Analyze" : `Next: ${steps[currentStep + 1]}`}</span>
+            <span className="sm:hidden">{currentStep === 2 ? "Submit" : "Next"}</span>
             <ArrowRight className="h-4 w-4" />
           </Button>
         ) : null}

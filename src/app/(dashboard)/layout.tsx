@@ -1,6 +1,8 @@
 import { Navbar } from "@/components/layout/navbar"
 import { MobileNav } from "@/components/layout/mobile-nav"
 
+export const dynamic = "force-dynamic"
+
 export default function DashboardLayout({
   children,
 }: {

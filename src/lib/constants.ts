@@ -83,6 +83,7 @@ export const NAV_ITEMS = [
 ] as const
 
 export const MORE_MENU_ITEMS = [
+  { label: "Legal Dictionary", href: "/dictionary", icon: "BookA", badge: "New" },
   { label: "Trending Petitions", href: "/petitions", icon: "TrendingUp", badge: "Popular" },
   { label: "Rights Explorer", href: "/rights", icon: "Search" },
   { label: "Case Law Library", href: "/case-law", icon: "Star" },

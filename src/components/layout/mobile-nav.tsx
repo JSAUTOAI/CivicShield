@@ -8,7 +8,7 @@ import {
   ListChecks,
   Plus,
   FileText,
-  BookOpen,
+  Briefcase,
 } from "lucide-react"
 
 const items = [
@@ -16,14 +16,14 @@ const items = [
   { label: "Issues", href: "/issues", icon: ListChecks },
   { label: "New", href: "/issues/new", icon: Plus, highlight: true },
   { label: "Complaints", href: "/complaints", icon: FileText },
-  { label: "Resources", href: "/resources", icon: BookOpen },
+  { label: "Cases", href: "/cases", icon: Briefcase },
 ]
 
 export function MobileNav() {
   const pathname = usePathname()
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-background/95 backdrop-blur-xl md:hidden">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card/95 backdrop-blur-xl md:hidden">
       <div className="flex items-center justify-around px-2 py-1">
         {items.map((item) => {
           const Icon = item.icon

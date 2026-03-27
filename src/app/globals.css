@@ -1,11 +1,26 @@
 @import "tailwindcss";
 
+/* Hide scrollbar but keep scroll functionality */
+@utility scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Tell Tailwind v4 to use the .dark class (set by ThemeProvider) instead of
+   the default @media (prefers-color-scheme: dark) media query.
+   Without this, dark: utilities like dark:text-white are ignored when the
+   .dark class is toggled manually. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* ============================================================================
    CIVICSHIELD PREMIUM DESIGN SYSTEM
    A professional, trustworthy civic rights platform
    ============================================================================ */
 
-@theme inline {
+@theme {
   /* Typography */
   --font-sans: var(--font-geist-sans), "Inter", system-ui, -apple-system, sans-serif;
   --font-mono: var(--font-geist-mono), "JetBrains Mono", monospace;
@@ -28,38 +43,43 @@
   --color-danger: #ef4444;
   --color-info: #3b82f6;
 
+  /* Premium gradient accent */
+  --color-gradient-start: #4f6ef7;
+  --color-gradient-end: #7c3aed;
+
   /* Light theme */
-  --color-background: #ffffff;
-  --color-foreground: #0f172a;
-  --color-muted: #f8fafc;
-  --color-muted-foreground: #64748b;
+  --color-background: #f8f9fb;
+  --color-foreground: #1e293b;
+  --color-muted: #f1f4f9;
+  --color-muted-foreground: #6b7280;
   --color-card: #ffffff;
-  --color-card-foreground: #0f172a;
-  --color-border: #e2e8f0;
-  --color-input: #e2e8f0;
+  --color-card-foreground: #1e293b;
+  --color-border: #e5e7eb;
+  --color-input: #e5e7eb;
   --color-ring: #4f6ef7;
   --color-primary: #4f6ef7;
   --color-primary-foreground: #ffffff;
-  --color-secondary: #f1f5f9;
-  --color-secondary-foreground: #0f172a;
-  --color-accent: #f1f5f9;
-  --color-accent-foreground: #0f172a;
+  --color-secondary: #eef2f7;
+  --color-secondary-foreground: #1e293b;
+  --color-accent: #eef2f7;
+  --color-accent-foreground: #1e293b;
   --color-destructive: #ef4444;
   --color-destructive-foreground: #ffffff;
   --color-popover: #ffffff;
-  --color-popover-foreground: #0f172a;
+  --color-popover-foreground: #1e293b;
 
   /* Radius */
   --radius-sm: 0.375rem;
   --radius-md: 0.5rem;
   --radius-lg: 0.75rem;
   --radius-xl: 1rem;
+  --radius-2xl: 1.25rem;
 
-  /* Shadows */
-  --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.03);
-  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.06);
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.07), 0 2px 4px -2px rgb(0 0 0 / 0.05);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.08), 0 4px 6px -4px rgb(0 0 0 / 0.04);
+  /* Shadows — visible but subtle depth */
+  --shadow-xs: 0 1px 3px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.04);
+  --shadow-sm: 0 2px 4px -1px rgb(0 0 0 / 0.08), 0 1px 3px -1px rgb(0 0 0 / 0.06);
+  --shadow-md: 0 4px 8px -2px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.06);
+  --shadow-lg: 0 12px 20px -4px rgb(0 0 0 / 0.1), 0 4px 8px -4px rgb(0 0 0 / 0.05);
   --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.08), 0 8px 10px -6px rgb(0 0 0 / 0.04);
   --shadow-glow: 0 0 20px rgb(79 110 247 / 0.15);
 }
@@ -106,6 +126,7 @@ body {
   background: var(--color-background);
   color: var(--color-foreground);
   font-family: var(--font-sans);
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -227,7 +248,7 @@ body {
 }
 
 .card-hover:hover {
-  transform: translateY(-1px);
+  transform: translateY(-2px);
   box-shadow: var(--shadow-lg);
   border-color: var(--color-brand-200);
 }

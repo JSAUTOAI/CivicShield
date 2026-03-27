@@ -58,7 +58,7 @@ export function Select({
         disabled={disabled}
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
-          "flex h-10 w-full items-center justify-between rounded-lg border border-input bg-background px-3 py-2 text-sm transition-all duration-200",
+          "flex h-11 w-full items-center justify-between rounded-lg border border-input bg-card px-3.5 py-2.5 text-sm transition-all duration-200",
           "hover:border-brand-300 dark:hover:border-brand-700",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           "disabled:cursor-not-allowed disabled:opacity-50",

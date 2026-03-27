@@ -6,9 +6,12 @@ const publicPaths = [
   "/register",
   "/forgot-password",
   "/landing",
+  "/pricing",
   "/privacy",
   "/terms",
   "/api/auth",
+  "/api/stripe/webhook",
+  "/api/email/inbound",
 ]
 
 export default auth((req) => {
@@ -16,11 +19,6 @@ export default auth((req) => {
 
   // Allow public paths
   if (publicPaths.some((path) => pathname.startsWith(path))) {
-    return NextResponse.next()
-  }
-
-  // Allow API routes for auth
-  if (pathname.startsWith("/api/auth")) {
     return NextResponse.next()
   }
 

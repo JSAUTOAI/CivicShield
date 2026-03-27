@@ -2,93 +2,97 @@
 
 import * as React from "react"
 import Link from "next/link"
+import { toast } from "sonner"
 import { cn } from "@/lib/utils"
+import { useFetch } from "@/lib/hooks"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { PageSkeleton } from "@/components/ui/loading-skeleton"
+import { EmptyState, ErrorState } from "@/components/ui/empty-state"
+import type { ComplaintWithIssue } from "@/lib/types"
 import {
   ArrowLeft,
   FileText,
-  Edit,
   Send,
   Trash2,
   CheckCircle,
-  Clock,
+  Copy,
+  AlertTriangle,
+  X,
 } from "lucide-react"
 
 type TabType = "all" | "drafts" | "sent"
 
-const complaints = [
-  {
-    id: 1,
-    organization: "South wales police",
-    type: "Police Conduct",
-    createdAt: "2025-04-13",
-    status: "draft" as const,
-    preview: "PERSONAL INFORMATION SECTION (User can edit or remove) ===== Full Name: Jake S Address: [Your address] Email: jake@example.com Phone: [Your phone number] If you wish to remain anonymous. de...",
-  },
-  {
-    id: 2,
-    organization: "South wales police",
-    type: "Police Conduct",
-    createdAt: "2025-04-13",
-    status: "draft" as const,
-    preview: "[Today's Date] Office of Professional Standards South Wales Police Police Headquarters Bridgend CF31 3SU Dear Sir/Madam, Subject: Formal Complaint Regarding Inappropriate Conduct by South...",
-  },
-  {
-    id: 3,
-    organization: "swansea council",
-    type: "Local Council",
-    createdAt: "2025-04-13",
-    status: "sent" as const,
-    sentAt: "2025-04-13",
-    sentVia: "api",
-    preview: "plaintext ===== PERSONAL INFORMATION SECTION ===== Full Name: Jake S Address: [Your address] Email: jake@example.com Phone: [Your phone number] If you wish to remain anon...",
-  },
-  {
-    id: 4,
-    organization: "south wales school boards",
-    type: "School Board",
-    createdAt: "2025-04-14",
-    status: "draft" as const,
-    preview: "[Your Name] [Your Address] [Your Email] [Your Phone Number] [Date] South Wales School Boards [Their Address] [City, Postal Code] Dear Members of the South Wales School Boards, I am writing t...",
-  },
-  {
-    id: 5,
-    organization: "acuity law",
-    type: "Solicitor",
-    createdAt: "2025-09-28",
-    status: "draft" as const,
-    preview: "[Your Address] [City, Postcode] [Email Address] [Phone Number] [Date] The Office of the Legal Ombudsman PO Box 6806 Wolverhampton WV1 9WJ Dear Sir/Madam, Subject: Formal Complaint ...",
-  },
-  {
-    id: 6,
-    organization: "exodus",
-    type: "Bailiff/Enforcement",
-    createdAt: "2025-04-14",
-    status: "draft" as const,
-    preview: "[Your Address] [City, Postcode] [Date] Exodus Enforcement Agency [Agency's Address] [City, Postcode] Dear Sir/Madam, Subject: Formal Complaint Regarding Bailiff Misconduct and Rights Viol...",
-  },
-]
-
 export default function ComplaintsPage() {
   const [activeTab, setActiveTab] = React.useState<TabType>("all")
+  const { data: complaints, loading, error, refetch } = useFetch<ComplaintWithIssue[]>("/api/complaints")
+  const [actionLoading, setActionLoading] = React.useState<number | null>(null)
+  const [sendConfirmId, setSendConfirmId] = React.useState<number | null>(null)
+  const [truthChecked, setTruthChecked] = React.useState(false)
 
-  const filtered = complaints.filter((c) => {
+  const filtered = (complaints || []).filter((c) => {
     if (activeTab === "drafts") return c.status === "draft"
     if (activeTab === "sent") return c.status === "sent"
     return true
   })
 
   const tabs: { value: TabType; label: string; count: number }[] = [
-    { value: "all", label: "All Complaints", count: complaints.length },
-    { value: "drafts", label: "Drafts", count: complaints.filter((c) => c.status === "draft").length },
-    { value: "sent", label: "Sent", count: complaints.filter((c) => c.status === "sent").length },
+    { value: "all", label: "All Complaints", count: complaints?.length || 0 },
+    { value: "drafts", label: "Drafts", count: complaints?.filter((c) => c.status === "draft").length || 0 },
+    { value: "sent", label: "Sent", count: complaints?.filter((c) => c.status === "sent").length || 0 },
   ]
 
+  async function handleCopyText(complaint: ComplaintWithIssue) {
+    try {
+      await navigator.clipboard.writeText(complaint.complaintText)
+      toast.success("Complaint text copied to clipboard")
+    } catch {
+      toast.error("Failed to copy text")
+    }
+  }
+
+  async function handleSend(id: number) {
+    setActionLoading(id)
+    try {
+      const res = await fetch(`/api/complaints/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "sent", truthConfirmed: true }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: "Failed to send" }))
+        throw new Error(body.error || "Failed to send complaint")
+      }
+      toast.success("Complaint sent successfully")
+      setSendConfirmId(null)
+      setTruthChecked(false)
+      refetch()
+    } catch (err) {
+      toast.error((err as Error).message)
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  async function handleDelete(id: number) {
+    if (!confirm("Are you sure you want to delete this complaint?")) return
+    setActionLoading(id)
+    try {
+      const res = await fetch(`/api/complaints/${id}`, { method: "DELETE" })
+      if (!res.ok) throw new Error("Failed to delete complaint")
+      toast.success("Complaint deleted")
+      refetch()
+    } catch (err) {
+      toast.error((err as Error).message)
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-      <div className="mb-6 animate-fade-in">
+    <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+      <div className="mb-8 animate-fade-in">
         <div className="flex items-center gap-3 mb-1">
           <Link
             href="/"
@@ -102,7 +106,7 @@ export default function ComplaintsPage() {
       </div>
 
       {/* Tabs */}
-      <div className="mb-6 flex items-center gap-1 rounded-lg bg-muted p-1 w-fit animate-fade-in" style={{ animationDelay: "0.05s" }}>
+      <div className="mb-6 flex items-center gap-1 rounded-lg bg-muted p-1 w-full sm:w-fit animate-fade-in" style={{ animationDelay: "0.05s" }}>
         {tabs.map((tab) => (
           <button
             key={tab.value}
@@ -127,76 +131,182 @@ export default function ComplaintsPage() {
         ))}
       </div>
 
-      {/* Complaints list */}
-      <div className="space-y-4 stagger-fade-in">
-        {filtered.map((complaint) => (
-          <Card key={complaint.id} className="card-hover overflow-hidden">
-            <CardContent className="p-6">
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <h3 className="text-base font-semibold text-foreground">
-                    {complaint.organization}
-                  </h3>
-                  <p className="text-xs text-muted-foreground">
-                    {complaint.type} - Created on{" "}
-                    {new Date(complaint.createdAt).toLocaleDateString("en-GB", {
+      {/* Content */}
+      {loading ? (
+        <PageSkeleton rows={4} />
+      ) : error ? (
+        <ErrorState message={error} onRetry={refetch} />
+      ) : filtered.length === 0 ? (
+        <EmptyState
+          icon={FileText}
+          title={activeTab === "all" ? "No complaints yet" : `No ${activeTab} complaints`}
+          description={activeTab === "all"
+            ? "Complaints are auto-generated when you run AI analysis on an issue."
+            : `You don't have any ${activeTab} complaints.`
+          }
+          actionLabel={activeTab === "all" ? "Log a New Issue" : undefined}
+          onAction={activeTab === "all" ? () => window.location.href = "/issues/new" : undefined}
+        />
+      ) : (
+        <div className="space-y-4 stagger-fade-in">
+          {filtered.map((complaint) => (
+            <Card key={complaint.id} className="card-hover overflow-hidden">
+              <CardContent className="p-6">
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <h3 className="text-base font-semibold text-foreground">
+                      {complaint.issue?.organization || "Unknown"}
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      {complaint.issue?.issueType || "Unknown"} - Created on{" "}
+                      {new Date(complaint.createdAt).toLocaleDateString("en-GB", {
+                        day: "2-digit",
+                        month: "2-digit",
+                        year: "numeric",
+                      })}
+                    </p>
+                  </div>
+                  <Badge
+                    variant={complaint.status === "sent" ? "success" : "default"}
+                  >
+                    {complaint.status === "sent" ? "Sent" : "Draft"}
+                  </Badge>
+                </div>
+
+                <p className="mb-4 text-sm text-muted-foreground line-clamp-2 leading-relaxed">
+                  {complaint.complaintText.slice(0, 200)}...
+                </p>
+
+                {complaint.status === "sent" && complaint.sentAt && (
+                  <div className="mb-4 flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400">
+                    <CheckCircle className="h-3.5 w-3.5" />
+                    Sent on {new Date(complaint.sentAt).toLocaleDateString("en-GB", {
                       day: "2-digit",
                       month: "2-digit",
                       year: "numeric",
-                    })}
-                  </p>
-                </div>
-                <Badge
-                  variant={complaint.status === "sent" ? "success" : "default"}
-                >
-                  {complaint.status === "sent" ? "Sent" : "Draft"}
-                </Badge>
-              </div>
+                    })}{" "}
+                    via {complaint.sentVia || "manual"}
+                  </div>
+                )}
 
-              <p className="mb-4 text-sm text-muted-foreground line-clamp-2 leading-relaxed">
-                {complaint.preview}
-              </p>
-
-              {complaint.status === "sent" && "sentAt" in complaint && (
-                <div className="mb-4 flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400">
-                  <CheckCircle className="h-3.5 w-3.5" />
-                  Sent on {new Date(complaint.sentAt).toLocaleDateString("en-GB", {
-                    day: "2-digit",
-                    month: "2-digit",
-                    year: "numeric",
-                  })}{" "}
-                  via {complaint.sentVia}
-                </div>
-              )}
-
-              <div className="flex items-center justify-between">
-                <Link href={`/issues/${complaint.id}`}>
-                  <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground">
-                    <FileText className="h-4 w-4" />
-                    View Issue
-                  </Button>
-                </Link>
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" className="gap-1.5">
-                    <Edit className="h-3.5 w-3.5" />
-                    Edit Complaint
-                  </Button>
-                  {complaint.status === "draft" && (
-                    <Button variant="brand" size="sm" className="gap-1.5">
-                      <Send className="h-3.5 w-3.5" />
-                      Send
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <Link href={`/issues/${complaint.issueId}`}>
+                    <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground">
+                      <FileText className="h-4 w-4" />
+                      View Issue
                     </Button>
-                  )}
-                  <Button variant="destructive" size="sm" className="gap-1.5">
-                    <Trash2 className="h-3.5 w-3.5" />
-                    Delete
-                  </Button>
+                  </Link>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5"
+                      onClick={() => handleCopyText(complaint)}
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                      <span className="hidden sm:inline">Copy Text</span>
+                      <span className="sm:hidden">Copy</span>
+                    </Button>
+                    {complaint.status === "draft" && (
+                      <Button
+                        variant="brand"
+                        size="sm"
+                        className="gap-1.5"
+                        disabled={actionLoading === complaint.id}
+                        onClick={() => {
+                          setSendConfirmId(complaint.id)
+                          setTruthChecked(false)
+                        }}
+                      >
+                        <Send className="h-3.5 w-3.5" />
+                        Send
+                      </Button>
+                    )}
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="gap-1.5"
+                      disabled={actionLoading === complaint.id}
+                      onClick={() => handleDelete(complaint.id)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Delete
+                    </Button>
+                  </div>
                 </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* Statement of Truth Modal */}
+      {sendConfirmId !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="mx-4 w-full max-w-md rounded-xl border border-border bg-background p-6 shadow-xl animate-scale-in">
+            <div className="flex items-start justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-amber-500" />
+                <h3 className="text-lg font-semibold">Confirm & Send</h3>
               </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+              <button
+                onClick={() => { setSendConfirmId(null); setTruthChecked(false) }}
+                className="rounded-md p-1 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800/50 dark:bg-amber-900/10">
+              <p className="text-sm text-foreground leading-relaxed">
+                This complaint will be sent via email to the recipient on your behalf.
+                Please ensure you have read the complaint in full and verified all
+                information, including legislation and case law references.
+              </p>
+            </div>
+
+            <label className="mt-4 flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={truthChecked}
+                onChange={(e) => setTruthChecked(e.target.checked)}
+                className="mt-1 h-4 w-4 rounded border-border accent-brand-500"
+              />
+              <span className="text-sm text-foreground leading-relaxed">
+                I confirm I have read this complaint in full and believe the information
+                to be true and accurate. I understand CivicShield provides tools and
+                information, not legal advice.
+              </span>
+            </label>
+
+            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => { setSendConfirmId(null); setTruthChecked(false) }}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="brand"
+                size="sm"
+                className="gap-1.5"
+                disabled={!truthChecked || actionLoading === sendConfirmId}
+                onClick={() => handleSend(sendConfirmId)}
+              >
+                {actionLoading === sendConfirmId ? (
+                  <>Sending...</>
+                ) : (
+                  <>
+                    <Send className="h-3.5 w-3.5" />
+                    Send Complaint
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

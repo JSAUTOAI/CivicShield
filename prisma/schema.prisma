@@ -31,11 +31,15 @@ model User {
   accountLocked          Boolean   @default(false) @map("account_locked")
   accountLockedUntil     DateTime? @map("account_locked_until")
   subscriptionStatus     String    @default("free") @map("subscription_status")
-  subscriptionTier       String    @default("basic") @map("subscription_tier")
+  subscriptionTier       String    @default("free") @map("subscription_tier")
   subscriptionExpiresAt  DateTime? @map("subscription_expires_at")
   stripeCustomerId       String?   @map("stripe_customer_id")
   stripeSubscriptionId   String?   @map("stripe_subscription_id")
+  lifetimeEmailSends     Int       @default(0) @map("lifetime_email_sends")
+  dataShareOptOut        Boolean   @default(false) @map("data_share_opt_out")
   role                   String    @default("user")
+  emailNotifications     Boolean   @default(true) @map("email_notifications")
+  anonymousDefault       Boolean   @default(false) @map("anonymous_default")
 
   passwordHistory    PasswordHistory[]
   sessions           Session[]
@@ -175,6 +179,10 @@ model Complaint {
   openedAt          DateTime? @map("opened_at")
   respondedAt       DateTime? @map("responded_at")
   responseText      String?   @map("response_text")
+  isFollowUp        Boolean   @default(false) @map("is_follow_up")
+  followUpCount     Int       @default(0) @map("follow_up_count")
+  truthConfirmedAt  DateTime? @map("truth_confirmed_at")
+  replyToAddress    String?   @map("reply_to_address")
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at")
 
@@ -495,6 +503,32 @@ model Resource {
   updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
 
   @@map("resources")
+}
+
+// ============================================================================
+// LEGAL DICTIONARY
+// ============================================================================
+
+model DictionaryTerm {
+  id              Int       @id @default(autoincrement())
+  term            String    @unique
+  slug            String    @unique
+  definition      String
+  legalDefinition String?   @map("legal_definition")
+  category        String
+  jurisdiction    String    @default("England and Wales")
+  source          String?
+  relatedActNames String[]  @map("related_act_names")
+  relatedCaseNames String[] @map("related_case_names")
+  seeAlso         String[]  @map("see_also")
+  tags            String[]
+  usageExample    String?   @map("usage_example")
+  isFeatured      Boolean   @default(false) @map("is_featured")
+  sortOrder       Int       @default(0) @map("sort_order")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  @@map("dictionary_terms")
 }
 
 model SubmissionTarget {
