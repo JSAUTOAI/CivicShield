@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { signIn } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,8 +10,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Logo } from "@/components/layout/logo"
 import { Mail, Lock, ArrowRight, AlertCircle } from "lucide-react"
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const callbackUrl = searchParams.get("callbackUrl") || "/"
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState("")
   const [email, setEmail] = React.useState("")
@@ -34,7 +36,7 @@ export default function LoginPage() {
           ? "Invalid email or password"
           : result.error)
       } else {
-        router.push("/")
+        router.push(callbackUrl)
         router.refresh()
       }
     } catch {
@@ -127,5 +129,13 @@ export default function LoginPage() {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <React.Suspense fallback={null}>
+      <LoginForm />
+    </React.Suspense>
   )
 }

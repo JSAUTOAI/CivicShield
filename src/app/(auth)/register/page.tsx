@@ -3,6 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { signIn } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -50,7 +51,18 @@ export default function RegisterPage() {
       }
 
       // Auto-login after registration
-      router.push("/login?registered=true")
+      const loginResult = await signIn("credentials", {
+        email: formData.email,
+        password: formData.password,
+        redirect: false,
+      })
+
+      if (loginResult?.ok) {
+        router.push("/")
+        router.refresh()
+      } else {
+        router.push("/login?registered=true")
+      }
     } catch {
       setError("An unexpected error occurred")
     } finally {
