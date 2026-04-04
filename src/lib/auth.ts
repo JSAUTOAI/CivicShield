@@ -3,28 +3,11 @@ import Credentials from "next-auth/providers/credentials"
 import bcrypt from "bcryptjs"
 import { db } from "@/lib/db"
 
-const useSecureCookies = process.env.NEXTAUTH_URL?.startsWith("https://")
-const cookieDomain = process.env.NEXTAUTH_URL
-  ? new URL(process.env.NEXTAUTH_URL).hostname
-  : undefined
-
 export const { handlers, signIn, signOut, auth } = NextAuth({
   trustHost: true,
   pages: {
     signIn: "/login",
     error: "/login",
-  },
-  cookies: {
-    sessionToken: {
-      name: useSecureCookies ? "__Secure-authjs.session-token" : "authjs.session-token",
-      options: {
-        httpOnly: true,
-        sameSite: "lax",
-        path: "/",
-        secure: useSecureCookies,
-        domain: cookieDomain?.startsWith("www.") ? cookieDomain.slice(4) : cookieDomain,
-      },
-    },
   },
   session: {
     strategy: "jwt",

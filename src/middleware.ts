@@ -23,10 +23,18 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next()
   }
 
-  // Check for JWT token (lightweight — no Prisma/bcrypt imports)
-  const isSecure = req.nextUrl.protocol === "https:"
-  const cookieName = isSecure ? "__Secure-authjs.session-token" : "authjs.session-token"
-  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET, cookieName })
+  // Check for JWT token — try both secure and non-secure cookie names
+  const token = await getToken({
+    req,
+    secret: process.env.NEXTAUTH_SECRET,
+    cookieName: "__Secure-authjs.session-token",
+    salt: "__Secure-authjs.session-token",
+  }) || await getToken({
+    req,
+    secret: process.env.NEXTAUTH_SECRET,
+    cookieName: "authjs.session-token",
+    salt: "authjs.session-token",
+  })
 
   if (!token) {
     const loginUrl = new URL("/login", req.url)
