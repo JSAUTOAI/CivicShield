@@ -59,8 +59,19 @@ export async function POST(request: Request) {
       )
     }
 
+    const userId = parseInt(session.user.id)
+
     // Create the appropriate DB record based on context
     if (issueId) {
+      // Verify user owns this issue
+      const issue = await db.issue.findFirst({
+        where: { id: parseInt(issueId), userId },
+        select: { id: true },
+      })
+      if (!issue) {
+        return NextResponse.json({ error: "Issue not found" }, { status: 404 })
+      }
+
       const record = await db.evidenceItem.create({
         data: {
           issueId: parseInt(issueId),
@@ -82,6 +93,15 @@ export async function POST(request: Request) {
     }
 
     if (caseId) {
+      // Verify user owns this case
+      const legalCase = await db.legalCase.findFirst({
+        where: { id: parseInt(caseId), userId },
+        select: { id: true },
+      })
+      if (!legalCase) {
+        return NextResponse.json({ error: "Case not found" }, { status: 404 })
+      }
+
       const record = await db.courtDocument.create({
         data: {
           caseId: parseInt(caseId),

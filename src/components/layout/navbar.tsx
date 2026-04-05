@@ -3,8 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-// TODO: Re-enable once database is connected
-// import { useSession, signOut } from "next-auth/react"
+import { useSession, signOut } from "next-auth/react"
 import { cn } from "@/lib/utils"
 import { Logo } from "./logo"
 import { useTheme } from "./theme-provider"
@@ -51,11 +50,10 @@ const moreItems = [
 export function Navbar() {
   const pathname = usePathname()
   const router = useRouter()
-  // TODO: Re-enable once database is connected
-  // const { data: session } = useSession()
+  const { data: session } = useSession()
   const { theme, toggleTheme } = useTheme()
-  const userName = "Jake S"
-  const userEmail = "jake@example.com"
+  const userName = session?.user?.name || "User"
+  const userEmail = session?.user?.email || ""
   const [moreOpen, setMoreOpen] = React.useState(false)
   const [profileOpen, setProfileOpen] = React.useState(false)
   const [searchOpen, setSearchOpen] = React.useState(false)
@@ -237,7 +235,7 @@ export function Navbar() {
                   <p className="text-xs text-muted-foreground">{userEmail}</p>
                 </div>
                 <Link
-                  href="/profile"
+                  href="/settings"
                   onClick={() => setProfileOpen(false)}
                   className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-accent"
                 >
@@ -254,7 +252,7 @@ export function Navbar() {
                 </Link>
                 <div className="my-1.5 border-t border-border" />
                 <button
-                  onClick={() => router.push("/login")}
+                  onClick={() => signOut({ callbackUrl: "/login" })}
                   className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-destructive transition-colors hover:bg-destructive/10"
                 >
                   <LogOut className="h-4 w-4" />

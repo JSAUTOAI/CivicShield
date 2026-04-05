@@ -78,7 +78,7 @@ export default function TermsPage() {
           <h2 className="mb-3 text-lg font-semibold text-foreground">5. Subscriptions and Payments</h2>
           <p>
             CivicShield offers a free tier with limited features, and paid subscription plans
-            (Pro at &pound;4.99/month and Agency at &pound;14.99/month) with expanded capabilities.
+            (Basic at &pound;4.99/month, Pro at &pound;14.99/month, and Agency at &pound;19.99/month) with expanded capabilities.
           </p>
           <ul className="mt-2 list-disc space-y-1 pl-5">
             <li>Payments are processed securely through Stripe</li>

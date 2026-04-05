@@ -15,6 +15,16 @@ import { parseReplyToAddress } from "@/lib/email"
  */
 export async function POST(request: Request) {
   try {
+    // Verify the webhook comes from a known source
+    // Resend webhooks include svix headers for signature verification
+    const svixId = request.headers.get("svix-id")
+    const svixTimestamp = request.headers.get("svix-timestamp")
+    const svixSignature = request.headers.get("svix-signature")
+
+    if (!svixId || !svixTimestamp || !svixSignature) {
+      return NextResponse.json({ error: "Missing webhook signature headers" }, { status: 401 })
+    }
+
     const body = await request.json()
 
     // Resend sends different event types — we care about "email.received"
