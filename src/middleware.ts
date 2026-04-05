@@ -23,17 +23,11 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next()
   }
 
-  // Check for JWT token — try both secure and non-secure cookie names
+  // Check for JWT token — secureCookie must match what auth.ts uses on HTTPS
   const token = await getToken({
     req,
     secret: process.env.NEXTAUTH_SECRET,
-    cookieName: "__Secure-authjs.session-token",
-    salt: "__Secure-authjs.session-token",
-  }) || await getToken({
-    req,
-    secret: process.env.NEXTAUTH_SECRET,
-    cookieName: "authjs.session-token",
-    salt: "authjs.session-token",
+    secureCookie: req.nextUrl.protocol === "https:",
   })
 
   if (!token) {
