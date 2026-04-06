@@ -150,58 +150,52 @@ export default function ComplaintsPage() {
       ) : (
         <div className="space-y-4 stagger-fade-in">
           {filtered.map((complaint) => (
-            <Card key={complaint.id} className="card-hover overflow-hidden">
-              <CardContent className="p-6">
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <h3 className="text-base font-semibold text-foreground">
-                      {complaint.issue?.organization || "Unknown"}
-                    </h3>
-                    <p className="text-xs text-muted-foreground">
-                      {complaint.issue?.issueType || "Unknown"} - Created on{" "}
-                      {new Date(complaint.createdAt).toLocaleDateString("en-GB", {
-                        day: "2-digit",
-                        month: "2-digit",
+            <Link key={complaint.id} href={`/complaints/${complaint.id}`}>
+              <Card className="card-hover overflow-hidden">
+                <CardContent className="p-6">
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <h3 className="text-base font-semibold text-foreground">
+                        {complaint.issue?.organization || "Unknown"}
+                      </h3>
+                      <p className="text-xs text-muted-foreground">
+                        {complaint.issue?.issueType || "Unknown"} &middot;{" "}
+                        {new Date(complaint.createdAt).toLocaleDateString("en-GB", {
+                          day: "numeric",
+                          month: "long",
+                          year: "numeric",
+                        })}
+                      </p>
+                    </div>
+                    <Badge
+                      variant={complaint.status === "sent" ? "success" : "default"}
+                    >
+                      {complaint.status === "sent" ? "Sent" : "Draft"}
+                    </Badge>
+                  </div>
+
+                  <p className="mb-4 text-sm text-muted-foreground line-clamp-2 leading-relaxed">
+                    {complaint.complaintText.slice(0, 150)}...
+                  </p>
+
+                  {complaint.status === "sent" && complaint.sentAt && (
+                    <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400">
+                      <CheckCircle className="h-3.5 w-3.5" />
+                      Sent on {new Date(complaint.sentAt).toLocaleDateString("en-GB", {
+                        day: "numeric",
+                        month: "long",
                         year: "numeric",
-                      })}
-                    </p>
-                  </div>
-                  <Badge
-                    variant={complaint.status === "sent" ? "success" : "default"}
-                  >
-                    {complaint.status === "sent" ? "Sent" : "Draft"}
-                  </Badge>
-                </div>
+                      })}{" "}
+                      via {complaint.sentVia || "manual"}
+                    </div>
+                  )}
 
-                <p className="mb-4 text-sm text-muted-foreground line-clamp-2 leading-relaxed">
-                  {complaint.complaintText.slice(0, 200)}...
-                </p>
-
-                {complaint.status === "sent" && complaint.sentAt && (
-                  <div className="mb-4 flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400">
-                    <CheckCircle className="h-3.5 w-3.5" />
-                    Sent on {new Date(complaint.sentAt).toLocaleDateString("en-GB", {
-                      day: "2-digit",
-                      month: "2-digit",
-                      year: "numeric",
-                    })}{" "}
-                    via {complaint.sentVia || "manual"}
-                  </div>
-                )}
-
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <Link href={`/issues/${complaint.issueId}`}>
-                    <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground">
-                      <FileText className="h-4 w-4" />
-                      View Issue
-                    </Button>
-                  </Link>
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="mt-3 flex flex-wrap items-center gap-2" onClick={(e) => e.preventDefault()}>
                     <Button
                       variant="outline"
                       size="sm"
                       className="gap-1.5"
-                      onClick={() => handleCopyText(complaint)}
+                      onClick={(e) => { e.preventDefault(); handleCopyText(complaint) }}
                     >
                       <Copy className="h-3.5 w-3.5" />
                       <span className="hidden sm:inline">Copy Text</span>
@@ -213,7 +207,8 @@ export default function ComplaintsPage() {
                         size="sm"
                         className="gap-1.5"
                         disabled={actionLoading === complaint.id}
-                        onClick={() => {
+                        onClick={(e) => {
+                          e.preventDefault()
                           setSendConfirmId(complaint.id)
                           setTruthChecked(false)
                         }}
@@ -227,15 +222,15 @@ export default function ComplaintsPage() {
                       size="sm"
                       className="gap-1.5"
                       disabled={actionLoading === complaint.id}
-                      onClick={() => handleDelete(complaint.id)}
+                      onClick={(e) => { e.preventDefault(); handleDelete(complaint.id) }}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                       Delete
                     </Button>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            </Link>
           ))}
         </div>
       )}
