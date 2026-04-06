@@ -33,6 +33,18 @@ export const ISSUE_CATEGORIES = {
     "Harassment / Personal Complaints",
     "Other Individual",
   ],
+  "Motoring & Vehicle Issues": [
+    "Vehicle Safety Defects & Recalls",
+    "Dealer Sale Issues",
+    "Warranty & Goodwill Disputes",
+    "Poor Repairs / Repeat Failures",
+    "Motor Finance Disputes",
+    "Insurance Claim Issues",
+    "MOT & Garage Complaints",
+    "Faulty Parts / Component Failures",
+    "DVLA / Registration Issues",
+    "Enforcement / Seizure Issues",
+  ],
 } as const
 
 export type IssueCategory = keyof typeof ISSUE_CATEGORIES
@@ -80,6 +92,7 @@ export const NAV_ITEMS = [
   { label: "Resources", href: "/resources", icon: "BookOpen", badge: "New" },
   { label: "New", href: "/issues/new", icon: "Plus" },
   { label: "Complaints", href: "/complaints", icon: "FileText" },
+  { label: "Motoring", href: "/motoring", icon: "Car" },
 ] as const
 
 export const MORE_MENU_ITEMS = [

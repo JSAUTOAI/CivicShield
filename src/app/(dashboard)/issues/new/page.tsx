@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -13,6 +13,7 @@ import { Select, type SelectOption } from "@/components/ui/select"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import { ISSUE_CATEGORIES, USER_ROLES, type IssueCategory } from "@/lib/constants"
+import { getEvidenceTemplate } from "@/lib/motoring-data"
 import {
   ArrowLeft,
   ArrowRight,
@@ -23,8 +24,11 @@ import {
   Users,
   Search,
   CheckCircle,
+  CheckCircle2,
+  Circle,
   Info,
   X,
+  Car,
 } from "lucide-react"
 
 const steps = ["Details", "Evidence", "Review", "Analysis"]
@@ -42,12 +46,13 @@ const roleOptions: SelectOption[] = USER_ROLES.map((r) => ({
 
 export default function NewIssuePage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [currentStep, setCurrentStep] = React.useState(0)
   const [submitting, setSubmitting] = React.useState(false)
   const [formData, setFormData] = React.useState({
-    category: "",
+    category: searchParams.get("category") || "",
     role: "complainant",
-    issueType: "",
+    issueType: searchParams.get("type") || "",
     description: "",
     organization: "",
     individual: "",
@@ -58,6 +63,7 @@ export default function NewIssuePage() {
   })
   const [uploadedFiles, setUploadedFiles] = React.useState<File[]>([])
   const [isDragOver, setIsDragOver] = React.useState(false)
+  const [motoringEvidenceChecked, setMotoringEvidenceChecked] = React.useState<Set<string>>(new Set())
   const [orgSearching, setOrgSearching] = React.useState(false)
   const [orgDetails, setOrgDetails] = React.useState<{
     organizationName: string
@@ -414,6 +420,78 @@ export default function NewIssuePage() {
                   ))}
                 </div>
               )}
+
+              {/* Motoring-specific evidence checklist */}
+              {formData.category === "Motoring & Vehicle Issues" && (() => {
+                const issueSlug = formData.issueType
+                  ? formData.issueType.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")
+                  : ""
+                const template = getEvidenceTemplate(issueSlug)
+                // Also try matching on first word for common categories
+                const allTemplates = ["vehicle-safety-defects", "dealer-sale-issues", "motor-finance-disputes", "poor-repairs"]
+                const matchedSlug = template ? issueSlug : allTemplates.find((s) =>
+                  formData.issueType.toLowerCase().includes(s.split("-")[0])
+                )
+                const finalTemplate = template || (matchedSlug ? getEvidenceTemplate(matchedSlug) : null)
+
+                if (!finalTemplate) return null
+                return (
+                  <Card className="border-amber-100 bg-amber-50/30 dark:border-amber-900/30 dark:bg-amber-900/10">
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Car className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                        <p className="text-sm font-semibold text-foreground">
+                          Motoring Evidence Checklist
+                        </p>
+                        <Badge variant="secondary" className="ml-auto text-[10px]">
+                          {motoringEvidenceChecked.size}/{finalTemplate.items.length}
+                        </Badge>
+                      </div>
+                      <p className="mb-3 text-xs text-muted-foreground">
+                        Gather these items to strengthen your complaint. Required items are marked.
+                      </p>
+                      <div className="space-y-1.5">
+                        {finalTemplate.items.map((item) => {
+                          const isChecked = motoringEvidenceChecked.has(item.label)
+                          return (
+                            <button
+                              key={item.label}
+                              type="button"
+                              onClick={() => {
+                                setMotoringEvidenceChecked((prev) => {
+                                  const next = new Set(prev)
+                                  if (next.has(item.label)) next.delete(item.label)
+                                  else next.add(item.label)
+                                  return next
+                                })
+                              }}
+                              className={cn(
+                                "flex w-full items-start gap-2.5 rounded-lg border p-2.5 text-left text-sm transition-colors",
+                                isChecked
+                                  ? "border-emerald-200 bg-emerald-50/50 dark:border-emerald-900/30 dark:bg-emerald-900/10"
+                                  : "border-border hover:bg-muted/50"
+                              )}
+                            >
+                              {isChecked ? (
+                                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-emerald-600 dark:text-emerald-400" />
+                              ) : (
+                                <Circle className="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                              )}
+                              <div className="min-w-0 flex-1">
+                                <span className={cn("text-xs font-medium", isChecked && "line-through text-muted-foreground")}>
+                                  {item.label}
+                                  {item.required && <span className="ml-1 text-red-500">*</span>}
+                                </span>
+                                <p className="text-[10px] text-muted-foreground">{item.description}</p>
+                              </div>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )
+              })()}
 
               <Card className="border-brand-100 bg-brand-50/30 dark:border-brand-900/30 dark:bg-brand-900/10">
                 <CardContent className="p-4">

@@ -8,7 +8,7 @@ import {
   ListChecks,
   Plus,
   FileText,
-  Briefcase,
+  Car,
 } from "lucide-react"
 
 const items = [
@@ -16,7 +16,7 @@ const items = [
   { label: "Issues", href: "/issues", icon: ListChecks },
   { label: "New", href: "/issues/new", icon: Plus, highlight: true },
   { label: "Complaints", href: "/complaints", icon: FileText },
-  { label: "Cases", href: "/cases", icon: Briefcase },
+  { label: "Motoring", href: "/motoring", icon: Car },
 ]
 
 export function MobileNav() {

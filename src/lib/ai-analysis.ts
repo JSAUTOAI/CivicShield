@@ -2,6 +2,7 @@
 // Analyzes issues against UK law and generates structured legal analysis
 
 import { resolveSourceUrl } from "./legal-sources"
+import { matchDefectPatterns, type DefectHub } from "./motoring-defect-hubs"
 
 /**
  * Fetch with automatic retry for transient errors (HTTP 529 overloaded).
@@ -168,6 +169,52 @@ RESPOND IN VALID JSON matching this exact structure:
   ]
 }`
 
+const MOTORING_SYSTEM_PROMPT_SUPPLEMENT = `
+
+MOTORING-SPECIFIC INSTRUCTIONS (this issue is a motoring/vehicle complaint):
+- For safety defects: format the complaint to include DVSA safety defect report language and structure
+- Reference Consumer Rights Act 2015 heavily — especially s.9 (satisfactory quality), s.10 (fitness for purpose), s.11 (as described), s.20 (right to reject within 30 days), s.24 (final right to reject after failed repair)
+- Reference General Product Safety Regulations 2005 where the defect poses a safety risk — manufacturers have ongoing duties to monitor and recall
+- For finance disputes: include FCA complaint procedures, Consumer Credit Act 1974 s.75 (joint liability), and Financial Ombudsman escalation
+- For dealer disputes: reference Consumer Protection from Unfair Trading Regulations 2008 for misleading practices
+- CC recipients MUST include the relevant oversight bodies:
+  - DVSA (for safety defects) — gov.uk/report-vehicle-safety-defect
+  - Trading Standards via Citizens Advice (for sales/dealer issues)
+  - Financial Ombudsman Service (for finance disputes)
+  - The Motor Ombudsman (for garage/repair/warranty issues — if the business is a member)
+  - Vehicle Certification Agency (for systemic type-approval failures)
+- For pre-action letters, reference the Pre-Action Protocol for Consumer Disputes
+- If the issue matches a known manufacturer defect pattern (provided below), cite the specific defect data, the manufacturer's documented position, and DVSA's failure to act
+- Emphasise that the burden of proof is on the retailer/manufacturer for the first 6 months under s.19(14) CRA 2015
+- For warranty disputes: note that statutory rights exist independently of any warranty (s.31 CRA 2015)`
+
+function getMotoringContext(description: string): string | null {
+  const matchedDefects = matchDefectPatterns(description)
+  if (matchedDefects.length === 0) return null
+
+  return matchedDefects.map((defect: DefectHub) => `
+KNOWN DEFECT MATCH: ${defect.title}
+Manufacturer: ${defect.manufacturer}
+Severity: ${defect.severity.toUpperCase()}
+Affected Models: ${defect.affectedModels.map((m) => `${m.model} (${m.years})`).join(", ")}
+Issue: ${defect.issueDescription}
+Failure Mechanism: ${defect.failureMechanism}
+Safety Impact: ${defect.safetyImpact}
+Known Repair Cost: ${defect.knownCost}
+DVSA Position: ${defect.dvsaPosition}
+Manufacturer Position: ${defect.manufacturerPosition}
+Related Legislation: ${defect.relatedLegislation.join("; ")}
+Common Fault Codes: ${defect.evidenceExamples.filter((e) => e.includes("fault code") || e.includes("OBD")).join("; ")}
+
+IMPORTANT: This is a KNOWN, SYSTEMIC defect. The complaint should:
+1. Emphasise this is a design deficiency, NOT wear and tear
+2. Reference the manufacturer's duty under General Product Safety Regulations 2005
+3. Note that DVSA has received numerous reports but has not acted
+4. Include specific reference to the affected models and failure mechanism
+5. Demand the manufacturer covers the full repair cost as the vehicle was not of satisfactory quality
+`).join("\n")
+}
+
 export async function analyzeIssue(issue: {
   issueCategory: string
   issueType: string
@@ -238,6 +285,19 @@ Provide a full legal analysis with:
 5. CC recipients — identify the correct oversight/regulatory body for this type of complaint
 6. Recommended actions the complainant should take`
 
+  // Motoring-specific augmentation
+  let systemPrompt = ANALYSIS_SYSTEM_PROMPT
+  let fullUserMessage = userMessage
+
+  if (issue.issueCategory === "Motoring & Vehicle Issues") {
+    systemPrompt += MOTORING_SYSTEM_PROMPT_SUPPLEMENT
+
+    const defectContext = getMotoringContext(issue.description)
+    if (defectContext) {
+      fullUserMessage += `\n\n${defectContext}`
+    }
+  }
+
   const response = await fetchWithRetry("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -248,8 +308,8 @@ Provide a full legal analysis with:
     body: JSON.stringify({
       model: "claude-sonnet-4-20250514",
       max_tokens: 4096,
-      system: ANALYSIS_SYSTEM_PROMPT,
-      messages: [{ role: "user", content: userMessage }],
+      system: systemPrompt,
+      messages: [{ role: "user", content: fullUserMessage }],
     }),
   })
 

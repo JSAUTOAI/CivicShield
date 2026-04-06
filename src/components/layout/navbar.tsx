@@ -17,6 +17,7 @@ import {
   Plus,
   FileText,
   Briefcase,
+  Car,
   Search,
   Sun,
   Moon,
@@ -37,6 +38,7 @@ const navItems = [
   { label: "New", href: "/issues/new", icon: Plus },
   { label: "Complaints", href: "/complaints", icon: FileText },
   { label: "Cases", href: "/cases", icon: Briefcase },
+  { label: "Motoring", href: "/motoring", icon: Car, badge: "New" },
 ]
 
 const moreItems = [

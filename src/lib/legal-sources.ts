@@ -68,6 +68,17 @@ const LEGISLATION_URLS: Record<string, string> = {
   "The Certification Officer (Amendment of Fees) Regulations 2022": "https://www.legislation.gov.uk/uksi/2022/1164",
   "Consumer Contracts (Information, Cancellation and Additional Charges) Regulations 2013": "https://www.legislation.gov.uk/uksi/2013/3134",
   "The Consumer Protection from Unfair Trading Regulations 2008": "https://www.legislation.gov.uk/uksi/2008/1277",
+  "Consumer Protection from Unfair Trading Regulations 2008": "https://www.legislation.gov.uk/uksi/2008/1277",
+
+  // Motoring-specific legislation
+  "General Product Safety Regulations 2005": "https://www.legislation.gov.uk/uksi/2005/1803",
+  "The General Product Safety Regulations 2005": "https://www.legislation.gov.uk/uksi/2005/1803",
+  "Road Vehicles (Approval) Regulations 2020": "https://www.legislation.gov.uk/uksi/2020/818",
+  "The Road Vehicles (Approval) Regulations 2020": "https://www.legislation.gov.uk/uksi/2020/818",
+  "Consumer Protection Act 1987": "https://www.legislation.gov.uk/ukpga/1987/43",
+  "Vehicle Excise and Registration Act 1994": "https://www.legislation.gov.uk/ukpga/1994/22",
+  "Road Vehicles (Registration and Licensing) Regulations 2002": "https://www.legislation.gov.uk/uksi/2002/2742",
+  "Insurance Act 2015": "https://www.legislation.gov.uk/ukpga/2015/4",
 }
 
 function normalizeActTitle(title: string): string {
@@ -188,8 +199,8 @@ const REGULATORY_BODIES: RegulatoryBody[] = [
   {
     name: "Driver and Vehicle Standards Agency (DVSA)",
     url: "https://www.gov.uk/government/organisations/driver-and-vehicle-standards-agency",
-    complaintsUrl: "https://www.gov.uk/report-driving-medical-condition",
-    keywords: ["dvsa", "vehicle", "driving", "mot", "roadworthiness", "steering", "recall"],
+    complaintsUrl: "https://www.gov.uk/report-vehicle-safety-defect",
+    keywords: ["dvsa", "vehicle", "driving", "mot", "roadworthiness", "steering", "recall", "safety defect", "vehicle recall", "power steering", "jlr", "brake failure"],
   },
   {
     name: "Parliamentary and Health Service Ombudsman (PHSO)",
@@ -226,6 +237,43 @@ const REGULATORY_BODIES: RegulatoryBody[] = [
     url: "https://www.gov.uk/government/organisations/hm-prison-and-probation-service",
     complaintsUrl: "https://www.gov.uk/government/organisations/prisons-and-probation-ombudsman",
     keywords: ["prison", "probation", "inmate", "prisoner", "parole"],
+  },
+  // Motoring-specific regulatory bodies
+  {
+    name: "Driver and Vehicle Licensing Agency (DVLA)",
+    url: "https://www.gov.uk/government/organisations/driver-and-vehicle-licensing-agency",
+    complaintsUrl: "https://www.gov.uk/government/organisations/driver-and-vehicle-licensing-agency/about/complaints-procedure",
+    keywords: ["dvla", "registration", "v5", "v5c", "vehicle tax", "road tax", "log book", "keeper", "sorn", "driving licence"],
+  },
+  {
+    name: "Vehicle Certification Agency (VCA)",
+    url: "https://www.vehicle-certification-agency.gov.uk",
+    complaintsUrl: "https://www.vehicle-certification-agency.gov.uk/contact-us/",
+    keywords: ["vca", "vehicle approval", "type approval", "vehicle certification", "vehicle standards"],
+  },
+  {
+    name: "Department for Transport (DfT)",
+    url: "https://www.gov.uk/government/organisations/department-for-transport",
+    complaintsUrl: "https://www.gov.uk/government/organisations/department-for-transport/about/complaints-procedure",
+    keywords: ["department for transport", "dft", "transport policy", "road safety policy"],
+  },
+  {
+    name: "The Motor Ombudsman (TMO)",
+    url: "https://www.themotorombudsman.org",
+    complaintsUrl: "https://www.themotorombudsman.org/consumers/make-a-complaint",
+    keywords: ["motor ombudsman", "tmo", "motor trade", "garage complaint", "dealer complaint", "vehicle warranty", "motor industry"],
+  },
+  {
+    name: "Financial Conduct Authority (FCA)",
+    url: "https://www.fca.org.uk",
+    complaintsUrl: "https://www.fca.org.uk/consumers/report-scam-unauthorised-firm",
+    keywords: ["fca", "financial conduct", "motor finance", "pcp", "hire purchase", "consumer credit", "dealer commission"],
+  },
+  {
+    name: "Competition and Markets Authority (CMA)",
+    url: "https://www.gov.uk/government/organisations/competition-and-markets-authority",
+    complaintsUrl: "https://www.gov.uk/government/organisations/competition-and-markets-authority/about/complaints-procedure",
+    keywords: ["cma", "competition", "anti-competitive", "market investigation", "consumer protection enforcement"],
   },
 ]
 
@@ -285,6 +333,9 @@ const TRUSTED_DOMAINS = [
   "echr.coe.int",
   "un.org",
   "barstandardsboard.org.uk",
+  "themotorombudsman.org",
+  "fca.org.uk",
+  "vehicle-certification-agency.gov.uk",
 ]
 
 export function isVerifiedUrl(url: string): boolean {
