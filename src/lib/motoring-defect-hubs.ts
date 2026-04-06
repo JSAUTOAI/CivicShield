@@ -40,8 +40,8 @@ export const MOTORING_DEFECT_HUBS: DefectHub[] = [
   {
     slug: "jlr-power-steering",
     manufacturer: "Jaguar Land Rover (JLR)",
-    title: "JLR Power Steering Failure — Water Ingress",
-    subtitle: "Catastrophic loss of power steering after driving through standing water",
+    title: "EPS Housing Failure — Catastrophic Power Steering Loss",
+    subtitle: "Suspected material deficiency in EPS housing causing cracks through heat cycling, leading to sudden power steering failure across multiple models and brands",
     severity: "critical",
     affectedModels: [
       { model: "Land Rover Discovery Sport", years: "2015–2024", variants: "All variants including facelift models" },
@@ -51,11 +51,11 @@ export const MOTORING_DEFECT_HUBS: DefectHub[] = [
       { model: "Range Rover Velar", years: "2017–2024", variants: "Some variants reported" },
     ],
     issueDescription:
-      "Vehicles manufactured by Jaguar Land Rover are experiencing complete or partial loss of power steering after the vehicle drives through even small amounts of standing water (puddles, surface water, light flooding). The steering becomes extremely heavy or locks entirely, creating an immediate and serious safety hazard — particularly at speed, on motorways, or when cornering. This is not a gradual degradation; it is a sudden, catastrophic failure that occurs without warning.",
+      "Vehicles manufactured by Jaguar Land Rover are experiencing complete or partial loss of electronic power assisted steering (EPS). The steering becomes extremely heavy or locks entirely without warning, creating an immediate and serious safety hazard — particularly at speed, on motorways, or when cornering. This is not a gradual degradation; it is a sudden, catastrophic failure. While water contact (puddles, surface water) is a common trigger, the underlying cause appears to be a fundamental material deficiency in the EPS unit housing itself. The same or similar EPS components appear to be used across multiple JLR models and potentially other vehicle brands, suggesting a shared supplier component issue rather than a vehicle-specific design flaw.",
     failureMechanism:
-      "Water enters the engine bay through inadequate sealing around the front of the vehicle and reaches the electric power steering (EPS) rack or its electronic control module. The water causes corrosion, short-circuiting, or sensor failure within the EPS system. Despite JLR marketing many of these vehicles as having 'all-terrain capability' and wade sensing features, the steering rack assembly lacks adequate waterproofing for conditions that any UK driver would encounter routinely — standing water on roads after rainfall. The fault is a design deficiency, not wear and tear.",
+      "The electronic power steering (EPS) unit housing develops cracks or splits in its metal casing over time due to repeated heat cycling during normal vehicle operation. This is strongly suspected to be caused by the use of inadequate materials during the production of these EPS components. As the vehicle's engine bay heats and cools through normal driving, the thermal expansion and contraction causes stress fractures in the housing material. Once the housing integrity is compromised, the EPS unit becomes vulnerable to moisture ingress, corrosion, short-circuiting, and ultimately complete failure. This explains why the defect commonly presents after contact with standing water — the water exploits existing cracks in an already-compromised housing. However, the root cause is the material deficiency, not the water itself. This is not confirmed as established fact, but the pattern is highly consistent across a large and growing number of cases involving multiple models and potentially multiple brands sharing the same EPS components. The fault is a production and materials deficiency, not wear and tear.",
     safetyImpact:
-      "CRITICAL — Sudden loss of power steering at any speed constitutes an immediate risk of loss of vehicle control, particularly on motorways, dual carriageways, and during cornering. This defect has the potential to cause serious injury or death to the vehicle occupants and other road users. The fact that it occurs after contact with standing water — an everyday UK driving condition — makes the risk especially acute.",
+      "CRITICAL — Sudden loss of power steering at any speed constitutes an immediate risk of loss of vehicle control, particularly on motorways, dual carriageways, and during cornering. This defect has the potential to cause serious injury or death to the vehicle occupants and other road users. The underlying material deficiency means any affected vehicle is at risk regardless of driving conditions — water contact simply accelerates failure of an already-compromised component. The high volume of daily complaints being raised to both JLR and DVSA demonstrates the scale and seriousness of this issue.",
     knownCost:
       "JLR dealers are quoting £2,500 to £4,000+ for steering rack replacement and associated diagnostic work. Many owners report being told the repair is not covered by warranty because it is classified as 'water damage' or 'wear and tear' — even on vehicles with low mileage and full service history.",
     dvsaPosition:
@@ -64,15 +64,18 @@ export const MOTORING_DEFECT_HUBS: DefectHub[] = [
       "JLR customer services and dealership networks are consistently classifying this failure as 'wear and tear' or 'water damage not covered by warranty.' JLR has not acknowledged the defect as a design issue, has not issued a Technical Service Bulletin (TSB) to dealers, and has not offered a voluntary recall or extended warranty for the affected component. Some owners report being offered partial 'goodwill' contributions, but these are inconsistent and often conditional on signing non-disclosure agreements.",
     evidenceExamples: [
       "OBD-II diagnostic fault codes: C0051 (EPS motor circuit), U0131 (lost communication with PSCM), C1A00 (steering column module fault)",
-      "Dashboard warning: 'Steering Assistance Fault' or 'Restricted Performance' after driving through water",
-      "Independent engineer's report confirming water ingress to EPS rack — not caused by submersion or abuse",
-      "Vehicle wading depth specification vs. actual water depth that caused the failure",
-      "Photographs of corrosion on the steering rack connector/module",
+      "Dashboard warning: 'Steering Assistance Fault' or 'Restricted Performance'",
+      "Photographs of the EPS housing showing visible cracks, splits, or fractures in the metal casing",
+      "Independent engineer's report examining the EPS unit housing for material fatigue or heat-cycle damage",
+      "Evidence of corrosion or moisture ingress through compromised housing (consequence of the crack, not the root cause)",
       "JLR service records showing the vehicle was maintained to manufacturer specifications",
       "DVSA safety defect report reference number showing the report was filed",
-      "Screenshots from owner forums showing widespread reports of the same failure",
-      "Dealer diagnostic report showing the EPS rack failure diagnosis",
-      "Quotes from multiple dealers confirming the same repair cost range",
+      "Screenshots from owner forums showing widespread reports of the same failure pattern across multiple models",
+      "Evidence that the same or similar EPS component is used across multiple vehicle models/brands",
+      "Dealer diagnostic report showing the EPS unit failure diagnosis",
+      "Quotes from multiple dealers confirming the same repair cost range (£2,500–£4,000+)",
+      "Photographs of road/weather conditions at time of failure (if water was a trigger)",
+      "Part numbers from the failed EPS unit to identify the component supplier",
     ],
     complaintStrategy: [
       {
@@ -80,9 +83,10 @@ export const MOTORING_DEFECT_HUBS: DefectHub[] = [
         target: "JLR Customer Relations",
         action: "Submit a formal complaint to JLR's UK customer relations team (not just the dealer) citing the Consumer Rights Act 2015 and General Product Safety Regulations 2005",
         keyPoints: [
-          "The vehicle was not of satisfactory quality — a vehicle marketed for all-terrain use should withstand standing water (s.9 CRA 2015)",
-          "The vehicle was not fit for purpose — driving on wet UK roads is a reasonably foreseeable use (s.10 CRA 2015)",
-          "This is a design deficiency, not wear and tear — the EPS rack lacks adequate waterproofing",
+          "The vehicle was not of satisfactory quality — the EPS housing is manufactured from inadequate materials that crack under normal heat cycling (s.9 CRA 2015)",
+          "The vehicle was not fit for purpose — a steering system that fails under normal operating conditions is fundamentally unfit (s.10 CRA 2015)",
+          "This is a production and materials deficiency, not wear and tear — the EPS housing develops cracks through thermal stress during normal use",
+          "The same EPS component appears to be failing across multiple models and potentially multiple brands, indicating a shared supplier/manufacturing defect",
           "Request: full repair at JLR's cost, or rejection of the vehicle if within rights period",
           "Set a 14-day deadline for a substantive response",
         ],
@@ -94,7 +98,7 @@ export const MOTORING_DEFECT_HUBS: DefectHub[] = [
         keyPoints: [
           "Report via gov.uk/report-vehicle-safety-defect",
           "Emphasise this is a SAFETY defect — sudden loss of steering at speed risks lives",
-          "Note this affects multiple JLR models across multiple years — this is systemic",
+          "Note this affects multiple JLR models across multiple years AND potentially other brands using the same EPS component — this is systemic",
           "Include your diagnostic codes, independent report, and any dealer quotes",
           "Request confirmation of report receipt and ask what action DVSA intends to take",
           "If DVSA fails to act, this becomes grounds for escalation to VCA and DfT",
@@ -194,6 +198,10 @@ function getDefectKeywords(hub: DefectHub): string[] {
         "steering failure",
         "steering fault",
         "steering assistance",
+        "eps",
+        "eps housing",
+        "housing crack",
+        "heat cycle",
         "water",
         "puddle",
         "standing water",
@@ -204,7 +212,6 @@ function getDefectKeywords(hub: DefectHub): string[] {
         "evoque",
         "e-pace",
         "steering rack",
-        "eps",
         "c0051",
         "u0131",
       ]

@@ -207,11 +207,13 @@ Related Legislation: ${defect.relatedLegislation.join("; ")}
 Common Fault Codes: ${defect.evidenceExamples.filter((e) => e.includes("fault code") || e.includes("OBD")).join("; ")}
 
 IMPORTANT: This is a KNOWN, SYSTEMIC defect. The complaint should:
-1. Emphasise this is a design deficiency, NOT wear and tear
-2. Reference the manufacturer's duty under General Product Safety Regulations 2005
-3. Note that DVSA has received numerous reports but has not acted
-4. Include specific reference to the affected models and failure mechanism
-5. Demand the manufacturer covers the full repair cost as the vehicle was not of satisfactory quality
+1. Emphasise this is a PRODUCTION AND MATERIALS DEFICIENCY, NOT wear and tear — the EPS housing cracks through normal heat cycling due to inadequate materials
+2. Note that water contact is a trigger that exploits existing cracks, but the root cause is the material deficiency in the EPS housing
+3. Reference the manufacturer's duty under General Product Safety Regulations 2005
+4. Note that DVSA has received numerous daily complaints but has not acted
+5. Include specific reference to the affected models and that the same EPS component appears across multiple models and potentially multiple brands
+6. Demand the manufacturer covers the full repair cost as the vehicle was not of satisfactory quality
+7. Note this is not yet confirmed as established fact but the pattern is highly consistent across a large number of cases — present as strong suspicion supported by evidence
 `).join("\n")
 }
 
