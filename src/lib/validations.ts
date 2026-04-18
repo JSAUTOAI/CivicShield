@@ -55,6 +55,13 @@ export const complaintUpdateSchema = z.object({
   recipientAddress: z.string().optional(),
   recipientOrg: z.string().optional(),
   truthConfirmed: z.boolean().optional(),
+  userCcEmail: z
+    .string()
+    .optional()
+    .refine(
+      (v) => !v || z.string().email().safeParse(v).success,
+      "Invalid email address"
+    ),
 })
 
 export const dictionarySearchSchema = z.object({

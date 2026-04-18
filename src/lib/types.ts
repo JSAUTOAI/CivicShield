@@ -63,6 +63,7 @@ export interface ComplaintData {
   recipientAddress: string | null
   recipientOrg: string | null
   ccRecipients: Array<{ name: string; organization: string; role: string }>
+  userCcEmail: string | null
   status: string
   sentAt: string | null
   sentVia: string | null

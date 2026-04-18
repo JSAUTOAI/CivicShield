@@ -79,6 +79,9 @@ export async function PATCH(
     if (validated.recipientEmail) updateData.recipientEmail = validated.recipientEmail
     if (validated.recipientAddress) updateData.recipientAddress = validated.recipientAddress
     if (validated.recipientOrg) updateData.recipientOrg = validated.recipientOrg
+    if (validated.userCcEmail !== undefined) {
+      updateData.userCcEmail = validated.userCcEmail || null
+    }
 
     if (validated.status === "sent") {
       // Statement of truth must be confirmed before sending
@@ -100,10 +103,15 @@ export async function PATCH(
           select: { fullName: true, email: true },
         })
 
-        // Build CC list from complaint's ccRecipients
+        // Build CC list from complaint's ccRecipients + optional user personal CC
         const ccEmails = (existing.ccRecipients as Array<{ email?: string }>)
           ?.map((r) => r.email)
           .filter(Boolean) as string[] || []
+
+        const personalCc = validated.userCcEmail || existing.userCcEmail
+        if (personalCc && !ccEmails.includes(personalCc)) {
+          ccEmails.push(personalCc)
+        }
 
         const subject = `Formal Complaint: ${existing.issue.issueType} — ${existing.issue.organization || "Your Organisation"}`
 

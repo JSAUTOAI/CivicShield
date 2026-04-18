@@ -173,6 +173,7 @@ model Complaint {
   recipientAddress  String?   @map("recipient_address")
   recipientOrg      String?   @map("recipient_org")
   ccRecipients      Json[]    @map("cc_recipients")
+  userCcEmail       String?   @map("user_cc_email")
   status            String    @default("draft")
   sentAt            DateTime? @map("sent_at")
   sentVia           String?   @map("sent_via")

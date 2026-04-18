@@ -3,6 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
+import { useSession } from "next-auth/react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { useFetch } from "@/lib/hooks"
@@ -119,6 +120,15 @@ export default function ComplaintDetailPage() {
   const [actionLoading, setActionLoading] = React.useState(false)
   const [sendModalOpen, setSendModalOpen] = React.useState(false)
   const [truthChecked, setTruthChecked] = React.useState(false)
+  const { data: session } = useSession()
+  const [ccSelf, setCcSelf] = React.useState(false)
+  const [ccEmail, setCcEmail] = React.useState("")
+
+  React.useEffect(() => {
+    if (sendModalOpen && !ccEmail && session?.user?.email) {
+      setCcEmail(session.user.email)
+    }
+  }, [sendModalOpen, session?.user?.email, ccEmail])
 
   async function handleCopyText() {
     if (!complaint) return
@@ -137,7 +147,11 @@ export default function ComplaintDetailPage() {
       const res = await fetch(`/api/complaints/${complaint.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "sent", truthConfirmed: true }),
+        body: JSON.stringify({
+          status: "sent",
+          truthConfirmed: true,
+          userCcEmail: ccSelf && ccEmail ? ccEmail : "",
+        }),
       })
       if (!res.ok) {
         const body = await res.json().catch(() => ({ error: "Failed to send" }))
@@ -146,6 +160,7 @@ export default function ComplaintDetailPage() {
       toast.success("Complaint sent successfully")
       setSendModalOpen(false)
       setTruthChecked(false)
+      setCcSelf(false)
       refetch()
     } catch (err) {
       toast.error((err as Error).message)
@@ -471,6 +486,30 @@ export default function ComplaintDetailPage() {
                 This complaint will be sent via email to <strong>{complaint.recipientOrg || "the recipient"}</strong> on your behalf.
                 Please ensure you have read the complaint in full and verified all information.
               </p>
+            </div>
+
+            <div className="mt-4 rounded-lg border border-border bg-muted/40 p-3">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={ccSelf}
+                  onChange={(e) => setCcSelf(e.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-border accent-brand-500"
+                />
+                <span className="text-sm text-foreground leading-relaxed">
+                  Also send a copy to my personal email
+                  <span className="ml-1 text-xs text-muted-foreground">(optional)</span>
+                </span>
+              </label>
+              {ccSelf && (
+                <input
+                  type="email"
+                  value={ccEmail}
+                  onChange={(e) => setCcEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  className="mt-2 w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+              )}
             </div>
 
             <label className="mt-4 flex items-start gap-3 cursor-pointer">
