@@ -3,12 +3,11 @@
 import * as React from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { signIn } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Logo } from "@/components/layout/logo"
-import { Mail, Lock, User, ArrowRight, CheckCircle, AlertCircle } from "lucide-react"
+import { Mail, Lock, User, ArrowRight, CheckCircle, AlertCircle, Phone, MapPin, Shield } from "lucide-react"
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -18,6 +17,8 @@ export default function RegisterPage() {
     fullName: "",
     username: "",
     email: "",
+    phone: "",
+    address: "",
     password: "",
   })
 
@@ -50,19 +51,8 @@ export default function RegisterPage() {
         return
       }
 
-      // Auto-login after registration
-      const loginResult = await signIn("credentials", {
-        email: formData.email,
-        password: formData.password,
-        redirect: false,
-      })
-
-      if (loginResult?.ok) {
-        router.push("/")
-        router.refresh()
-      } else {
-        router.push("/login?registered=true")
-      }
+      // Redirect to verification page instead of auto-login
+      router.push(`/verify-email?email=${encodeURIComponent(formData.email)}`)
     } catch {
       setError("An unexpected error occurred")
     } finally {
@@ -103,7 +93,7 @@ export default function RegisterPage() {
                   Full name
                 </label>
                 <Input
-                  placeholder="Jake Smith"
+                  placeholder="John Smith"
                   icon={<User className="h-4 w-4" />}
                   value={formData.fullName}
                   onChange={(e) => update("fullName", e.target.value)}
@@ -115,7 +105,7 @@ export default function RegisterPage() {
                   Username
                 </label>
                 <Input
-                  placeholder="jakesmith"
+                  placeholder="johnsmith"
                   value={formData.username}
                   onChange={(e) => update("username", e.target.value)}
                   required
@@ -129,12 +119,47 @@ export default function RegisterPage() {
               </label>
               <Input
                 type="email"
-                placeholder="jake@example.com"
+                placeholder="you@example.com"
                 icon={<Mail className="h-4 w-4" />}
                 value={formData.email}
                 onChange={(e) => update("email", e.target.value)}
                 required
               />
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-foreground">
+                  Phone number
+                </label>
+                <Input
+                  type="tel"
+                  placeholder="07700 900000"
+                  icon={<Phone className="h-4 w-4" />}
+                  value={formData.phone}
+                  onChange={(e) => update("phone", e.target.value)}
+                  required
+                />
+              </div>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-foreground">
+                  Contact address
+                </label>
+                <Input
+                  placeholder="123 High Street, Cardiff, CF10 1AA"
+                  icon={<MapPin className="h-4 w-4" />}
+                  value={formData.address}
+                  onChange={(e) => update("address", e.target.value)}
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="flex items-start gap-2 rounded-lg border border-brand-200 bg-brand-50 px-4 py-3 dark:border-brand-800 dark:bg-brand-950/30">
+              <Shield className="mt-0.5 h-4 w-4 flex-shrink-0 text-brand-600 dark:text-brand-400" />
+              <p className="text-xs text-muted-foreground">
+                Your details are protected and will not be visible publicly. They will only be visible in your profile unless you choose to include them on your complaints.
+              </p>
             </div>
 
             <div>

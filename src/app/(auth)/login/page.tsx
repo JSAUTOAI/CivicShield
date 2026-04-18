@@ -8,16 +8,20 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Logo } from "@/components/layout/logo"
-import { Mail, Lock, ArrowRight, AlertCircle } from "lucide-react"
+import { Mail, Lock, ArrowRight, AlertCircle, CheckCircle } from "lucide-react"
 
 function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const callbackUrl = searchParams.get("callbackUrl") || "/"
+  const verified = searchParams.get("verified") === "true"
+  const tokenError = searchParams.get("error")
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState("")
   const [email, setEmail] = React.useState("")
   const [password, setPassword] = React.useState("")
+
+  const isVerifyError = error.toLowerCase().includes("verify your email")
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -61,10 +65,41 @@ function LoginForm() {
         </CardHeader>
 
         <CardContent className="px-0 lg:px-6">
-          {error && (
+          {verified && (
+            <div className="mb-4 flex items-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400">
+              <CheckCircle className="h-4 w-4 flex-shrink-0" />
+              Email verified successfully. You can now sign in.
+            </div>
+          )}
+
+          {tokenError === "invalid-token" && (
             <div className="mb-4 flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
               <AlertCircle className="h-4 w-4 flex-shrink-0" />
-              {error}
+              Invalid verification link. Please request a new one.
+            </div>
+          )}
+
+          {tokenError === "token-expired" && (
+            <div className="mb-4 flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+              <AlertCircle className="h-4 w-4 flex-shrink-0" />
+              Verification link has expired. Please request a new one.
+            </div>
+          )}
+
+          {error && (
+            <div className="mb-4">
+              <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                {error}
+              </div>
+              {isVerifyError && email && (
+                <Link
+                  href={`/verify-email?email=${encodeURIComponent(email)}`}
+                  className="mt-2 block text-center text-sm font-medium text-brand-600 hover:text-brand-700 dark:text-brand-400"
+                >
+                  Resend verification email
+                </Link>
+              )}
             </div>
           )}
 
@@ -75,7 +110,7 @@ function LoginForm() {
               </label>
               <Input
                 type="email"
-                placeholder="jake@example.com"
+                placeholder="you@example.com"
                 icon={<Mail className="h-4 w-4" />}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}

@@ -86,6 +86,11 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           return null
         }
 
+        // Check email verification
+        if (!user.emailVerified) {
+          throw new Error("Please verify your email before signing in. Check your inbox for a verification link.")
+        }
+
         // Successful login — reset failed attempts
         await db.user.update({
           where: { id: user.id },

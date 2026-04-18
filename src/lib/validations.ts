@@ -13,6 +13,20 @@ export const registerSchema = z.object({
     .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
     .regex(/[0-9!@#$%^&*]/, "Password must contain at least one number or symbol"),
   fullName: z.string().min(2, "Full name is required").max(100),
+  phone: z
+    .string()
+    .min(1, "Phone number is required")
+    .transform((val) => val.replace(/\s+/g, ""))
+    .pipe(
+      z.string().regex(
+        /^(\+44|0)[0-9]{9,10}$/,
+        "Please enter a valid UK phone number (e.g. 07700 900000 or +447700900000)"
+      )
+    ),
+  address: z
+    .string()
+    .min(10, "Please enter your full contact address")
+    .max(500, "Address is too long"),
 })
 
 export const loginSchema = z.object({

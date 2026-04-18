@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server"
+import { randomBytes } from "crypto"
 import bcrypt from "bcryptjs"
 import { db } from "@/lib/db"
 import { registerSchema } from "@/lib/validations"
+import { sendVerificationEmail } from "@/lib/email"
 
 export async function POST(request: Request) {
   try {
@@ -33,6 +35,10 @@ export async function POST(request: Request) {
     // Hash password
     const hashedPassword = await bcrypt.hash(validated.password, 12)
 
+    // Generate verification token
+    const verificationToken = randomBytes(32).toString("hex")
+    const verificationTokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
+
     // Create user
     const user = await db.user.create({
       data: {
@@ -40,6 +46,10 @@ export async function POST(request: Request) {
         email: validated.email,
         password: hashedPassword,
         fullName: validated.fullName,
+        phone: validated.phone,
+        address: validated.address,
+        verificationToken,
+        verificationTokenExpires,
       },
     })
 
@@ -59,10 +69,13 @@ export async function POST(request: Request) {
       },
     })
 
+    // Send verification email
+    await sendVerificationEmail(validated.email, verificationToken, validated.fullName)
+
     return NextResponse.json(
       {
-        message: "Account created successfully",
-        user: { id: user.id, email: user.email, username: user.username },
+        message: "Account created successfully. Please check your email to verify your account.",
+        requiresVerification: true,
       },
       { status: 201 }
     )
