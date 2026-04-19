@@ -21,6 +21,7 @@ import {
   Copy,
   FileText,
   Mail,
+  MailOpen,
   MapPin,
   Send,
   Trash2,
@@ -91,6 +92,16 @@ function getTimelineSteps(complaint: ComplaintWithIssue): TimelineStep[] {
     icon: Mail,
     detail: complaint.sentVia === "email" ? "Sent via email" : "Sent manually",
   })
+
+  if (complaint.openedAt) {
+    steps.push({
+      label: "Complaint Opened",
+      date: complaint.openedAt,
+      status: "complete",
+      icon: MailOpen,
+      detail: "Recipient opened the email",
+    })
+  }
 
   if (complaint.respondedAt) {
     steps.push({
@@ -214,6 +225,9 @@ export default function ComplaintDetailPage() {
               <Badge variant={isSent ? "success" : "default"}>
                 {isSent ? "Sent" : "Draft"}
               </Badge>
+              {isSent && complaint.openedAt && !complaint.respondedAt && (
+                <Badge variant="brand">Opened</Badge>
+              )}
               {isSent && complaint.respondedAt && (
                 <Badge variant="brand">Response Received</Badge>
               )}

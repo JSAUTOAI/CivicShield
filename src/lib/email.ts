@@ -71,6 +71,7 @@ export async function sendComplaintEmail({
         "X-CivicShield-Complaint-Id": String(complaintId),
         "X-CivicShield-Sender-Name": senderName,
       },
+      tags: [{ name: "complaint_id", value: String(complaintId) }],
     })
 
     if (result.error) {
