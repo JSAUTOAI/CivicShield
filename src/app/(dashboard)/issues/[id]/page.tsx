@@ -9,6 +9,7 @@ import { useFetch } from "@/lib/hooks"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
 import { PageSkeleton } from "@/components/ui/loading-skeleton"
 import { EmptyState, ErrorState } from "@/components/ui/empty-state"
 import type { IssueDetail } from "@/lib/types"
@@ -33,6 +34,8 @@ import {
   CheckCircle,
   Copy,
   Loader2,
+  Lightbulb,
+  X,
 } from "lucide-react"
 
 // Types for the JSON stored in legalAnalysis table
@@ -108,6 +111,14 @@ export default function IssueDetailPage() {
   const [showSendConfirm, setShowSendConfirm] = React.useState(false)
   const [truthChecked, setTruthChecked] = React.useState(false)
   const [creatingCase, setCreatingCase] = React.useState(false)
+  const [recipientName, setRecipientName] = React.useState("")
+  const [recipientOrg, setRecipientOrg] = React.useState("")
+  const [recipientEmail, setRecipientEmail] = React.useState("")
+  const [recipientAddress, setRecipientAddress] = React.useState("")
+  const [recipientExpanded, setRecipientExpanded] = React.useState(false)
+  const [savingRecipient, setSavingRecipient] = React.useState(false)
+  const [showBodyHint, setShowBodyHint] = React.useState(false)
+  const autoExpandedRef = React.useRef(false)
 
   // Get the latest analysis and complaint
   const latestAnalysis = issue?.legalAnalysis?.[0]
@@ -128,6 +139,23 @@ export default function IssueDetailPage() {
       setComplaintText(latestComplaint.complaintText)
     }
   }, [latestComplaint, complaintText])
+
+  // Hydrate recipient fields and auto-expand once when email is missing
+  React.useEffect(() => {
+    if (!latestComplaint) return
+    setRecipientName(latestComplaint.recipientName || "")
+    setRecipientOrg(latestComplaint.recipientOrg || "")
+    setRecipientEmail(latestComplaint.recipientEmail || "")
+    setRecipientAddress(latestComplaint.recipientAddress || "")
+    if (
+      !autoExpandedRef.current &&
+      latestComplaint.status === "draft" &&
+      !latestComplaint.recipientEmail
+    ) {
+      setRecipientExpanded(true)
+      autoExpandedRef.current = true
+    }
+  }, [latestComplaint])
 
   async function handleAnalyze() {
     setAnalyzing(true)
@@ -167,6 +195,54 @@ export default function IssueDetailPage() {
     } finally {
       setSaving(false)
     }
+  }
+
+  async function handleSaveRecipient() {
+    if (!latestComplaint) return
+    const trimmedEmail = recipientEmail.trim()
+    if (trimmedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      toast.error("Please enter a valid email address")
+      return
+    }
+    // Only send keys with non-empty values — server schema rejects empty strings
+    // for recipientEmail (z.string().email()) and only writes truthy values anyway.
+    const payload: Record<string, string> = {}
+    if (recipientName.trim()) payload.recipientName = recipientName.trim()
+    if (recipientOrg.trim()) payload.recipientOrg = recipientOrg.trim()
+    if (trimmedEmail) payload.recipientEmail = trimmedEmail
+    if (recipientAddress.trim()) payload.recipientAddress = recipientAddress.trim()
+    if (Object.keys(payload).length === 0) {
+      toast.error("Please fill in at least one recipient field")
+      return
+    }
+    setSavingRecipient(true)
+    try {
+      const res = await fetch(`/api/complaints/${latestComplaint.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: "Failed" }))
+        throw new Error(body.error || "Failed to save recipient")
+      }
+      toast.success("Recipient details saved")
+      setRecipientExpanded(false)
+      setShowBodyHint(true)
+      refetch()
+    } catch (err) {
+      toast.error((err as Error).message)
+    } finally {
+      setSavingRecipient(false)
+    }
+  }
+
+  function handleCancelRecipient() {
+    setRecipientName(latestComplaint?.recipientName || "")
+    setRecipientOrg(latestComplaint?.recipientOrg || "")
+    setRecipientEmail(latestComplaint?.recipientEmail || "")
+    setRecipientAddress(latestComplaint?.recipientAddress || "")
+    setRecipientExpanded(false)
   }
 
   async function handleSendComplaint() {
@@ -598,18 +674,150 @@ export default function IssueDetailPage() {
                     </div>
                   </div>
 
-                  {latestComplaint.recipientOrg && (
-                    <div className="mb-4 rounded-lg bg-muted/50 p-3 text-xs">
-                      <span className="font-semibold">To: </span>
-                      {latestComplaint.recipientName && `${latestComplaint.recipientName}, `}
-                      {latestComplaint.recipientOrg}
-                      {latestComplaint.recipientEmail && ` (${latestComplaint.recipientEmail})`}
+                  {/* Recipient block — collapsible editor */}
+                  <div className="mb-4 space-y-2">
+                    {latestComplaint.status === "draft" && !latestComplaint.recipientEmail && (
+                      <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-100">
+                        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+                        <span>
+                          <strong>No recipient email yet.</strong> Add one below so we can send by email — without it, sending falls back to manual.
+                        </span>
+                      </div>
+                    )}
+
+                    {!recipientExpanded && (
+                      <div className="flex items-center justify-between gap-3 rounded-lg bg-muted/50 px-3 py-2 text-xs">
+                        <div className="min-w-0 flex-1">
+                          <span className="font-semibold">To: </span>
+                          {latestComplaint.recipientName && `${latestComplaint.recipientName}, `}
+                          {latestComplaint.recipientOrg || (
+                            <span className="italic text-muted-foreground">recipient not set</span>
+                          )}
+                          {latestComplaint.recipientEmail && ` (${latestComplaint.recipientEmail})`}
+                        </div>
+                        {latestComplaint.status === "draft" && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 flex-shrink-0 gap-1.5 px-2 text-xs"
+                            onClick={() => setRecipientExpanded(true)}
+                          >
+                            <Edit className="h-3 w-3" />
+                            Edit
+                          </Button>
+                        )}
+                      </div>
+                    )}
+
+                    {recipientExpanded && latestComplaint.status === "draft" && (
+                      <div className="space-y-3 rounded-lg border border-border bg-card p-4">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-sm font-semibold text-foreground">Recipient details</h4>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2"
+                            onClick={handleCancelRecipient}
+                            disabled={savingRecipient}
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div>
+                            <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                              Recipient name
+                            </label>
+                            <Input
+                              value={recipientName}
+                              onChange={(e) => setRecipientName(e.target.value)}
+                              placeholder="e.g. Complaints Manager"
+                              disabled={savingRecipient}
+                            />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                              Organisation
+                            </label>
+                            <Input
+                              value={recipientOrg}
+                              onChange={(e) => setRecipientOrg(e.target.value)}
+                              placeholder="e.g. Acme Ltd"
+                              disabled={savingRecipient}
+                            />
+                          </div>
+                          <div className="sm:col-span-2">
+                            <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                              Email
+                            </label>
+                            <Input
+                              type="email"
+                              value={recipientEmail}
+                              onChange={(e) => setRecipientEmail(e.target.value)}
+                              placeholder="complaints@example.com"
+                              disabled={savingRecipient}
+                            />
+                            {!recipientEmail && (
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                Without an email, the complaint will be marked as manually sent rather than emailed.
+                              </p>
+                            )}
+                          </div>
+                          <div className="sm:col-span-2">
+                            <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                              Postal address
+                            </label>
+                            <Input
+                              value={recipientAddress}
+                              onChange={(e) => setRecipientAddress(e.target.value)}
+                              placeholder="Full postal address (optional)"
+                              disabled={savingRecipient}
+                            />
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-end gap-2 pt-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={handleCancelRecipient}
+                            disabled={savingRecipient}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            variant="brand"
+                            size="sm"
+                            className="gap-1.5"
+                            onClick={handleSaveRecipient}
+                            disabled={savingRecipient}
+                          >
+                            {savingRecipient ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Save className="h-3.5 w-3.5" />
+                            )}
+                            Save recipient
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {showBodyHint && latestComplaint.status === "draft" && (
+                    <div className="mb-2 flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900 dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-100">
+                      <Lightbulb className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+                      <span>
+                        You&apos;ve updated the recipient — review the letter body below and update the addressee block if needed.
+                      </span>
                     </div>
                   )}
 
                   <textarea
                     value={complaintText}
-                    onChange={(e) => setComplaintText(e.target.value)}
+                    onChange={(e) => {
+                      setComplaintText(e.target.value)
+                      if (showBodyHint) setShowBodyHint(false)
+                    }}
                     readOnly={latestComplaint.status === "sent"}
                     className="w-full min-h-[400px] rounded-lg border border-border bg-muted/30 p-4 text-sm font-mono leading-relaxed focus:outline-none focus:ring-2 focus:ring-ring resize-y disabled:opacity-50"
                   />
