@@ -118,6 +118,24 @@ Every internal link in the app now resolves to a real page.
 
 ---
 
+## 3a. Deployed and verified on production — 19 Aug 2026
+
+Commit `ac99c99` pushed to `origin/main`; Vercel redeployed. Checked live on https://www.civicshield.co.uk:
+
+| Check | Result |
+|---|---|
+| `/forgot-password` | 200 (was a 404) |
+| `/reset-password` | 200 (did not exist) |
+| `GET /api/stats` | returns live counts |
+| `POST /api/email/events` without svix headers | **401** — no longer redirected to `/login` |
+| `POST /api/email/events` with svix headers | 200, handler reached |
+| Landing page | old fake figures return 0 matches; tiles show 100 / 39 / 44 / £0 |
+| Password reset on the live site | token issued for a real account |
+
+Note: `civicshield.co.uk` 307-redirects to `www.civicshield.co.uk` for every path — that is pre-existing and normal, not a fault.
+
+---
+
 ## 4. Next up
 
 Roughly in priority order.
