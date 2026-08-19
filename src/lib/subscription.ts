@@ -328,7 +328,7 @@ export async function getUsageStats(userId: number) {
  * Past-due subscriptions still get their tier (grace period).
  * Cancelled subscriptions revert to free (read-only).
  */
-function getEffectiveTier(tier: string, status: string): SubscriptionTier {
+export function getEffectiveTier(tier: string, status: string): SubscriptionTier {
   if (status === "cancelled" || status === "free") return "free"
   if (["active", "past_due"].includes(status)) {
     return (tier as SubscriptionTier) || "free"

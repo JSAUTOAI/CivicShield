@@ -14,6 +14,7 @@ import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import { ISSUE_CATEGORIES, USER_ROLES, type IssueCategory } from "@/lib/constants"
 import { getEvidenceTemplate } from "@/lib/motoring-data"
+import { uploadEvidenceFile, formatFileSize, type UploadStatus } from "@/lib/upload"
 import {
   ArrowLeft,
   ArrowRight,
@@ -29,9 +30,19 @@ import {
   Info,
   X,
   Car,
+  AlertCircle,
+  Loader2,
 } from "lucide-react"
 
 const steps = ["Details", "Evidence", "Review", "Analysis"]
+
+/** A file staged in the wizard, plus how its upload is going. */
+interface PendingFile {
+  file: File
+  status: UploadStatus
+  progress: number
+  error?: string
+}
 
 const categoryOptions: SelectOption[] = Object.keys(ISSUE_CATEGORIES).map((cat) => ({
   value: cat,
@@ -61,8 +72,29 @@ export default function NewIssuePage() {
     location: "",
     isAnonymous: false,
   })
-  const [uploadedFiles, setUploadedFiles] = React.useState<File[]>([])
+  const [uploadedFiles, setUploadedFiles] = React.useState<PendingFile[]>([])
   const [isDragOver, setIsDragOver] = React.useState(false)
+  // Tier file limits, so the wizard can reject oversized files before the user
+  // waits on an upload. /api/upload re-validates server-side regardless.
+  const [limits, setLimits] = React.useState<{
+    maxFilesPerIssue: number
+    maxFileSizeMB: number
+  } | null>(null)
+
+  React.useEffect(() => {
+    fetch("/api/subscription/usage")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((body) => {
+        const d = body?.data
+        if (d?.maxFilesPerIssue) {
+          setLimits({
+            maxFilesPerIssue: d.maxFilesPerIssue,
+            maxFileSizeMB: d.maxFileSizeMB,
+          })
+        }
+      })
+      .catch(() => {}) // limits are an optimisation; the server is authoritative
+  }, [])
   const [motoringEvidenceChecked, setMotoringEvidenceChecked] = React.useState<Set<string>>(new Set())
   const [orgSearching, setOrgSearching] = React.useState(false)
   const [orgDetails, setOrgDetails] = React.useState<{
@@ -86,21 +118,95 @@ export default function NewIssuePage() {
 
   const progressValue = ((currentStep + 1) / steps.length) * 100
 
+  // Files can't be uploaded until the issue exists (/api/upload/complete needs
+  // an issueId), so they're held here and uploaded straight after creation.
+  const addFiles = React.useCallback(
+    (incoming: File[]) => {
+      setUploadedFiles((prev) => {
+        const maxFiles = limits?.maxFilesPerIssue ?? Infinity
+        const maxBytes = (limits?.maxFileSizeMB ?? Infinity) * 1024 * 1024
+        const next = [...prev]
+
+        for (const file of incoming) {
+          if (next.length >= maxFiles) {
+            toast.error(
+              `Your plan allows ${maxFiles} file${maxFiles === 1 ? "" : "s"} per issue.`
+            )
+            break
+          }
+          if (file.size > maxBytes) {
+            toast.error(
+              `"${file.name}" is ${formatFileSize(file.size)} — your plan allows up to ${limits?.maxFileSizeMB}MB per file.`
+            )
+            continue
+          }
+          if (next.some((f) => f.file.name === file.name && f.file.size === file.size)) {
+            continue // already staged
+          }
+          next.push({ file, status: "pending", progress: 0 })
+        }
+        return next
+      })
+    },
+    [limits]
+  )
+
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
     setIsDragOver(false)
-    const files = Array.from(e.dataTransfer.files)
-    setUploadedFiles((prev) => [...prev, ...files])
+    addFiles(Array.from(e.dataTransfer.files))
   }
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      setUploadedFiles((prev) => [...prev, ...Array.from(e.target.files!)])
-    }
+    if (e.target.files) addFiles(Array.from(e.target.files))
+    e.target.value = "" // allow re-picking the same file after a removal
   }
 
   const removeFile = (index: number) => {
     setUploadedFiles((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  /**
+   * Upload every staged file against the new issue.
+   * Returns the number that failed so the caller can tell the user plainly
+   * rather than redirecting as though everything worked.
+   */
+  async function uploadStagedFiles(issueId: number): Promise<number> {
+    let failed = 0
+
+    for (let i = 0; i < uploadedFiles.length; i++) {
+      const staged = uploadedFiles[i]
+      if (staged.status === "done") continue
+
+      setUploadedFiles((prev) =>
+        prev.map((f, idx) => (idx === i ? { ...f, status: "uploading", progress: 0 } : f))
+      )
+
+      const result = await uploadEvidenceFile(staged.file, {
+        issueId,
+        onProgress: (percent) =>
+          setUploadedFiles((prev) =>
+            prev.map((f, idx) => (idx === i ? { ...f, progress: percent } : f))
+          ),
+      })
+
+      if (!result.ok) failed++
+
+      setUploadedFiles((prev) =>
+        prev.map((f, idx) =>
+          idx === i
+            ? {
+                ...f,
+                status: result.ok ? "done" : "error",
+                progress: result.ok ? 100 : f.progress,
+                error: result.error,
+              }
+            : f
+        )
+      )
+    }
+
+    return failed
   }
 
   return (
@@ -387,37 +493,68 @@ export default function NewIssuePage() {
                 </label>
               </div>
 
-              {/* Uploaded files list */}
+              {/* Staged files — uploaded once the issue is created on submit */}
               {uploadedFiles.length > 0 && (
                 <div className="space-y-2">
-                  {uploadedFiles.map((file, i) => (
-                    <div
-                      key={i}
-                      className="flex items-center justify-between rounded-lg border border-border bg-muted/50 px-4 py-3"
-                    >
-                      <div className="flex items-center gap-3">
-                        {file.type.startsWith("image/") ? (
-                          <FileImage className="h-5 w-5 text-blue-500" />
-                        ) : file.type.startsWith("video/") ? (
-                          <FileVideo className="h-5 w-5 text-purple-500" />
-                        ) : (
-                          <FileText className="h-5 w-5 text-amber-500" />
-                        )}
-                        <div>
-                          <p className="text-sm font-medium">{file.name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {(file.size / 1024 / 1024).toFixed(2)} MB
-                          </p>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => removeFile(i)}
-                        className="rounded-lg p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+                  {uploadedFiles.map((staged, i) => {
+                    const { file, status, progress, error } = staged
+                    return (
+                      <div
+                        key={`${file.name}-${file.size}-${i}`}
+                        className="rounded-lg border border-border bg-muted/50 px-4 py-3"
                       >
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-                  ))}
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex min-w-0 items-center gap-3">
+                            {status === "done" ? (
+                              <CheckCircle2 className="h-5 w-5 flex-shrink-0 text-emerald-500" />
+                            ) : status === "error" ? (
+                              <AlertCircle className="h-5 w-5 flex-shrink-0 text-destructive" />
+                            ) : status === "uploading" ? (
+                              <Loader2 className="h-5 w-5 flex-shrink-0 animate-spin text-brand-500" />
+                            ) : file.type.startsWith("image/") ? (
+                              <FileImage className="h-5 w-5 flex-shrink-0 text-blue-500" />
+                            ) : file.type.startsWith("video/") ? (
+                              <FileVideo className="h-5 w-5 flex-shrink-0 text-purple-500" />
+                            ) : (
+                              <FileText className="h-5 w-5 flex-shrink-0 text-amber-500" />
+                            )}
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium">{file.name}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {formatFileSize(file.size)}
+                                {status === "uploading" && ` — uploading ${progress}%`}
+                                {status === "done" && " — uploaded"}
+                              </p>
+                            </div>
+                          </div>
+                          {status !== "uploading" && status !== "done" && (
+                            <button
+                              onClick={() => removeFile(i)}
+                              className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                              aria-label={`Remove ${file.name}`}
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
+
+                        {status === "uploading" && (
+                          <Progress value={progress} className="mt-2 h-1" />
+                        )}
+                        {status === "error" && error && (
+                          <p className="mt-2 text-xs text-destructive">{error}</p>
+                        )}
+                      </div>
+                    )
+                  })}
+
+                  {limits && (
+                    <p className="text-xs text-muted-foreground">
+                      {uploadedFiles.length} of {limits.maxFilesPerIssue} files · up to{" "}
+                      {limits.maxFileSizeMB}MB each on your plan. Files upload when you
+                      submit the issue.
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -658,6 +795,18 @@ export default function NewIssuePage() {
                   }
 
                   const issue = await issueRes.json()
+
+                  // Upload evidence before analysing. These files previously
+                  // never left the browser — the wizard said "N files attached"
+                  // and then discarded them.
+                  if (uploadedFiles.length > 0) {
+                    const failedCount = await uploadStagedFiles(issue.id)
+                    if (failedCount > 0) {
+                      toast.error(
+                        `${failedCount} of ${uploadedFiles.length} file${uploadedFiles.length === 1 ? "" : "s"} failed to upload. Your issue was saved — you can retry from the issue page.`
+                      )
+                    }
+                  }
 
                   // Trigger AI analysis
                   const analysisRes = await fetch(`/api/issues/${issue.id}/analyze`, {

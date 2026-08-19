@@ -12,6 +12,19 @@ const AWS_SECRET_ACCESS_KEY = process.env.AWS_SECRET_ACCESS_KEY!
 const AWS_REGION = process.env.AWS_REGION!
 const AWS_S3_BUCKET = process.env.AWS_S3_BUCKET!
 
+/**
+ * Whether S3 credentials are present.
+ *
+ * Callers should check this before attempting an upload — without it the SDK
+ * fails deep inside the request with an opaque error, which surfaces to the
+ * user as a generic 500 and tells them nothing.
+ */
+export function isS3Configured(): boolean {
+  return Boolean(
+    AWS_ACCESS_KEY_ID && AWS_SECRET_ACCESS_KEY && AWS_REGION && AWS_S3_BUCKET
+  )
+}
+
 // ── Singleton S3 Client ──────────────────────────────────────────────
 let s3Client: S3Client | null = null
 
