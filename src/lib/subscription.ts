@@ -26,7 +26,10 @@ export const TIER_LIMITS: Record<SubscriptionTier, TierLimits> = {
     followUpsPerComplaint: 10,
     maxFilesPerIssue: 5,
     maxFileSizeMB: 200,
-    features: ["auto-send", "basic-tracking"],
+    // "case-builder-locked" = visible but not usable, per the launch decision.
+    // Without it Basic had strictly fewer features than Free, which is worse
+    // than the tier below it.
+    features: ["auto-send", "basic-tracking", "case-builder-locked"],
   },
   pro: {
     complaintsPerMonth: 15,
@@ -69,8 +72,40 @@ export function hasFeature(tier: string, feature: string): boolean {
 }
 
 /**
+ * Date the free tier switched from counting sends to counting generations.
+ *
+ * The free cap used to measure `lifetimeEmailSends`, which only increments on
+ * send — so a user who never pressed Send could generate unlimited Claude
+ * analyses, each one a paid API call. Counting generations closes that.
+ *
+ * Complaints generated before this date are NOT counted, so existing users
+ * aren't retroactively locked out over a bug that was ours. Without the
+ * cutoff, three accounts would have been blocked mid-use the moment this
+ * shipped. Their prior sends still count via `lifetimeEmailSends`.
+ */
+const FREE_TIER_GENERATION_COUNTING_FROM = new Date("2026-08-19T00:00:00Z")
+
+/**
+ * Free-tier lifetime usage: sends of any age, plus generations from the
+ * cutoff onward, whichever is higher.
+ */
+async function getFreeTierUsage(
+  userId: number,
+  lifetimeEmailSends: number
+): Promise<number> {
+  const generatedSinceCutoff = await db.complaint.count({
+    where: {
+      issue: { userId },
+      isFollowUp: false,
+      createdAt: { gte: FREE_TIER_GENERATION_COUNTING_FROM },
+    },
+  })
+  return Math.max(generatedSinceCutoff, lifetimeEmailSends)
+}
+
+/**
  * Check if user can create a new complaint.
- * Free: lifetime cap of 3 total sends.
+ * Free: lifetime cap of 3 complaints generated (see cutoff above).
  * Paid: monthly cap based on tier.
  */
 export async function checkComplaintLimit(userId: number): Promise<{
@@ -107,9 +142,9 @@ export async function checkComplaintLimit(userId: number): Promise<{
     }
   }
 
-  // Free tier: lifetime cap
+  // Free tier: lifetime cap.
   if (tier === "free") {
-    const used = user.lifetimeEmailSends
+    const used = await getFreeTierUsage(userId, user.lifetimeEmailSends)
     const limit = limits.complaintsTotal!
     return {
       allowed: used < limit,
@@ -257,7 +292,9 @@ export async function getUsageStats(userId: number) {
   let complaintsLimit: number
 
   if (tier === "free") {
-    complaintsUsed = user.lifetimeEmailSends
+    // Same helper as checkComplaintLimit — if these diverge, the usage shown
+    // in settings won't agree with the limit the user actually hits.
+    complaintsUsed = await getFreeTierUsage(userId, user.lifetimeEmailSends)
     complaintsLimit = limits.complaintsTotal!
   } else {
     const now = new Date()

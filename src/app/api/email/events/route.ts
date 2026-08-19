@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { db } from "@/lib/db"
+import { verifyResendWebhook } from "@/lib/webhook-verify"
 
 /**
  * POST /api/email/events
@@ -33,21 +34,16 @@ function extractComplaintId(payload: ResendEventPayload): number | null {
 
 export async function POST(request: Request) {
   try {
-    // Resend includes svix-* headers for signature verification.
-    // Cryptographic verification is handled in STEP 5; for now we require
-    // the headers to be present as a minimal guard.
-    const svixId = request.headers.get("svix-id")
-    const svixTimestamp = request.headers.get("svix-timestamp")
-    const svixSignature = request.headers.get("svix-signature")
+    // Read the raw body first — the signature is over the exact bytes sent,
+    // so it must be verified before parsing.
+    const rawBody = await request.text()
+    const check = verifyResendWebhook(rawBody, request.headers)
 
-    if (!svixId || !svixTimestamp || !svixSignature) {
-      return NextResponse.json(
-        { error: "Missing webhook signature headers" },
-        { status: 401 }
-      )
+    if (!check.ok) {
+      return NextResponse.json({ error: check.reason }, { status: 401 })
     }
 
-    const payload = (await request.json()) as ResendEventPayload
+    const payload = JSON.parse(rawBody) as ResendEventPayload
     const eventType = payload.type
     const complaintId = extractComplaintId(payload)
 

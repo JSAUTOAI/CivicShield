@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { parseReplyToAddress } from "@/lib/email"
+import { verifyResendWebhook } from "@/lib/webhook-verify"
 
 /**
  * POST /api/email/inbound
@@ -15,17 +16,16 @@ import { parseReplyToAddress } from "@/lib/email"
  */
 export async function POST(request: Request) {
   try {
-    // Verify the webhook comes from a known source
-    // Resend webhooks include svix headers for signature verification
-    const svixId = request.headers.get("svix-id")
-    const svixTimestamp = request.headers.get("svix-timestamp")
-    const svixSignature = request.headers.get("svix-signature")
+    // Read the raw body first — the signature is over the exact bytes sent,
+    // so it must be verified before parsing.
+    const rawBody = await request.text()
+    const check = verifyResendWebhook(rawBody, request.headers)
 
-    if (!svixId || !svixTimestamp || !svixSignature) {
-      return NextResponse.json({ error: "Missing webhook signature headers" }, { status: 401 })
+    if (!check.ok) {
+      return NextResponse.json({ error: check.reason }, { status: 401 })
     }
 
-    const body = await request.json()
+    const body = JSON.parse(rawBody)
 
     // Resend sends different event types — we care about "email.received"
     // The payload structure depends on Resend's inbound email format

@@ -428,7 +428,7 @@ export default function SettingsPage() {
                     {isFreeTier && "3 free complaint sends to experience the full platform"}
                     {currentTier === "basic" && "5 complaints/month with auto-send and basic tracking"}
                     {currentTier === "pro" && "15 complaints/month with case builder and full tracking"}
-                    {currentTier === "agency" && "30 complaints/month with bulk send and priority support"}
+                    {currentTier === "agency" && "30 complaints/month with priority support"}
                   </p>
                 </div>
                 <div className="text-right">
@@ -538,7 +538,6 @@ export default function SettingsPage() {
                       <li>15 complaints/month</li>
                       <li>20 follow-ups each</li>
                       <li>Full case builder</li>
-                      <li>PDF export</li>
                       <li>Priority support</li>
                     </ul>
                     <Button
@@ -560,7 +559,6 @@ export default function SettingsPage() {
                       <li>30 complaints/month</li>
                       <li>50 follow-ups each</li>
                       <li>Everything in Pro</li>
-                      <li>Bulk send</li>
                       <li>2GB file uploads</li>
                     </ul>
                     <Button

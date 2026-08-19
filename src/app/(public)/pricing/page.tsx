@@ -74,7 +74,9 @@ const tiers = [
       { text: "Full complaint tracking", included: true },
       { text: "15 files per issue (500MB)", included: true },
       { text: "Full case builder", included: true },
-      { text: "PDF export", included: true },
+      // PDF export is not implemented yet — do not advertise it as included
+      // until it ships. See CLAUDE.md.plans / README2.md.
+      { text: "PDF export", included: false },
       { text: "Priority support (48hr)", included: true },
       { text: "Bulk send", included: false },
     ],
@@ -96,9 +98,12 @@ const tiers = [
       { text: "Full complaint tracking", included: true },
       { text: "50 files per issue (2GB)", included: true },
       { text: "Full case builder", included: true },
-      { text: "PDF export", included: true },
+      // PDF export is not implemented yet — do not advertise it as included
+      // until it ships. See CLAUDE.md.plans / README2.md.
+      { text: "PDF export", included: false },
       { text: "Priority support (24hr)", included: true },
-      { text: "Bulk send", included: true },
+      // Bulk send is not implemented yet — same rule as PDF export above.
+      { text: "Bulk send", included: false },
     ],
   },
 ]
