@@ -136,6 +136,78 @@ Note: `civicshield.co.uk` 307-redirects to `www.civicshield.co.uk` for every pat
 
 ---
 
+## 3b. Post-audit fixes — 19 Aug 2026 (commits `bff539f`, `653f99e`)
+
+A full sweep of the codebase (every page mapped to its data source, every API
+route checked for UI callers, every schema model checked for readers, pricing
+claims checked against reality) turned up seven problems. Five are now fixed.
+
+### Fixed
+
+**Pricing honesty.** PDF export was sold as included on Pro (£14.99) and Agency
+(£19.99), and bulk send on Agency. Neither exists in the codebase. Both are now
+marked not-included on the pricing page and removed from the in-app upgrade
+panel, until they ship.
+
+**Webhook signatures are now verified.** Both `/api/email/inbound` and
+`/api/email/events` previously checked only that the three `svix-*` header
+*names* were present — anyone could post fake opens and replies into the
+accountability data. New `src/lib/webhook-verify.ts` verifies properly via
+`svix`, and both routes read the raw body before parsing (signatures are over
+the exact bytes sent).
+
+> **Action needed:** set `RESEND_WEBHOOK_SECRET` (Resend dashboard → Webhooks →
+> your endpoint) in `.env` **and in Vercel**. Until then the old
+> header-presence check still applies, with a warning logged on every request —
+> chosen over hard-failing, which would have silently killed reply and open
+> tracking on any deployment lacking the secret.
+
+**Free-tier generation leak closed.** The free cap counted `lifetimeEmailSends`,
+which only increments on *send* — so a free user who never pressed Send could
+generate unlimited Claude analyses, each a paid API call (41 drafts vs 11 sends).
+It now counts complaints generated.
+
+Generations before 2026-08-19 are deliberately not counted. Applying it
+retroactively would have locked three accounts out mid-use over a bug that was
+ours; verified against the live DB that **no existing user is newly blocked**.
+
+**Basic no longer has fewer features than Free.** `TIER_LIMITS.basic` was missing
+`case-builder` entirely while `free` had it. Basic now carries
+`case-builder-locked` (visible but not usable), per the launch decision.
+
+**Evidence upload now actually uploads.** The wizard's file picker only called
+`setUploadedFiles` — files stayed in React state, the review step said "N files
+attached", and on submit they were discarded. `/api/upload` and
+`/api/upload/complete` were fully written with zero callers. Now wired end to
+end: presign → PUT to S3 → create `EvidenceItem`, running after issue creation
+and before analysis, with per-file progress and an explicit failure count rather
+than a redirect implying success.
+
+Also fixed: `/api/upload` used the raw `subscriptionTier` column, so accounts
+carrying tier `"basic"` with status `"free"` were handed paid file limits. Now
+uses `getEffectiveTier`.
+
+> **Action needed:** AWS keys. `S3-SETUP-GUIDE.md` has been corrected — it had
+> the wrong dev port (3000, should be 3001), was missing
+> `https://www.civicshield.co.uk` from the CORS origins (the site redirects to
+> www, so uploads would have failed in production while working locally),
+> recommended over-broad `AmazonS3FullAccess`, and never mentioned Vercel env
+> vars. Until the keys are set, `/api/upload` returns a clear 503 and the user
+> is told their issue was still saved.
+
+### Still outstanding from the audit
+
+- **PDF export** and **bulk send** — now honestly advertised as unavailable; still to build.
+- **`hasFeature()` is never called** — no feature gating exists at all. Needed before PDF export can be tier-gated.
+
+### Note
+
+The seed account `jake@example.com` has been marked `emailVerified: true`, so
+the demo login documented in `PERSONAL.md` now actually works — `auth.ts`
+rejects unverified accounts regardless of password.
+
+---
+
 ## 4. Next up
 
 Roughly in priority order.

@@ -37,12 +37,21 @@ Go to: https://aws.amazon.com/free/
   {
     "AllowedHeaders": ["*"],
     "AllowedMethods": ["GET", "PUT", "POST"],
-    "AllowedOrigins": ["http://localhost:3000", "https://civicshield.co.uk"],
+    "AllowedOrigins": [
+      "http://localhost:3001",
+      "https://civicshield.co.uk",
+      "https://www.civicshield.co.uk"
+    ],
     "ExposeHeaders": ["ETag"],
     "MaxAgeSeconds": 3600
   }
 ]
 ```
+
+**Both** civicshield.co.uk and **www**.civicshield.co.uk must be listed. The
+site 307-redirects to the www host, so www is the origin the browser actually
+sends — omit it and uploads fail in production with a CORS error while working
+perfectly on localhost. The dev port is 3001, not 3000.
 
 5. Click "Save changes"
 
@@ -55,8 +64,28 @@ Go to: https://aws.amazon.com/free/
 3. User name: `civicshield-s3`
 4. Click "Next"
 5. Select "Attach policies directly"
-6. Search for `AmazonS3FullAccess` and tick the checkbox
-7. Click "Next" then "Create user"
+6. Click **"Create policy"**, choose the **JSON** tab, and paste the policy below.
+   Name it `civicshield-evidence-access`.
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"],
+      "Resource": "arn:aws:s3:::civicshield-evidence/*"
+    }
+  ]
+}
+```
+
+7. Back on the user screen, refresh the policy list, tick `civicshield-evidence-access`
+8. Click "Next" then "Create user"
+
+Do **not** use `AmazonS3FullAccess`. It grants access to every bucket in the
+account, including ones you create later for anything else. If these keys ever
+leak, the blast radius should be one bucket of evidence files, not everything.
 
 ---
 
@@ -89,9 +118,34 @@ AWS_S3_BUCKET="civicshield-evidence"
 
 ---
 
+## Step 7: Add the same four values to Vercel (do not skip)
+
+`.env` is local only. Without this step uploads work on your machine and stay
+broken for every real user.
+
+1. Go to the CivicShield project on vercel.com -> **Settings** -> **Environment Variables**
+2. Add all four (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`,
+   `AWS_S3_BUCKET`) for **Production, Preview and Development**
+3. Redeploy (Deployments -> latest -> Redeploy) — env vars are read at build time
+
+---
+
 ## That's it!
 
-Once you've pasted the keys into .env, let me know and the file upload system will be connected.
+Once the keys are in `.env` and in Vercel, uploads connect automatically —
+no code change needed. Until then `/api/upload` returns a clear 503 and the
+wizard tells the user their issue was still saved.
 
-Total time: ~10 minutes
+**Verify it worked:**
+1. Create an issue with a file attached
+2. The file row should show a progress bar, then "uploaded"
+3. Confirm a row landed in the database:
+
+```bash
+node --env-file=.env -e "const{PrismaClient}=require('@prisma/client');const p=new PrismaClient();p.evidenceItem.count().then(n=>{console.log('evidence items:',n);return p.\$disconnect()})"
+```
+
+That count has been 0 across all 44 issues to date. Anything above 0 means it works.
+
+Total time: ~15 minutes
 Total cost: Effectively free (S3 free tier = 5GB storage + 20,000 GET requests/month)
