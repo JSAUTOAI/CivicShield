@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { getPublicStatsSafe, type PublicStats } from "@/lib/stats"
 import { Logo } from "@/components/layout/logo"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -59,12 +60,21 @@ const features = [
   },
 ]
 
-const stats = [
-  { value: "10,000+", label: "Issues Tracked" },
-  { value: "95%", label: "Complaint Response Rate" },
-  { value: "500+", label: "Organisations Monitored" },
-  { value: "£0", label: "Cost to Get Started" },
-]
+// Live counts, refreshed every 5 minutes. These used to be invented figures
+// ("10,000+ Issues Tracked", "95% Complaint Response Rate"). Every tile below
+// is now a real number from the database — see src/lib/stats.ts.
+// A zero means the count is unavailable (see getPublicStatsSafe) or genuinely
+// nothing yet — either way, drop the tile rather than advertise "0".
+function buildStats(s: PublicStats) {
+  return [
+    { value: s.dictionaryTerms, label: "Legal Terms Explained" },
+    { value: s.organisations, label: "Organisations Covered" },
+    { value: s.issues, label: "Issues Logged" },
+  ]
+    .filter((t) => t.value > 0)
+    .map((t) => ({ value: t.value.toLocaleString(), label: t.label }))
+    .concat([{ value: "£0", label: "Cost to Get Started" }])
+}
 
 const categories = [
   "Police Conduct",
@@ -79,7 +89,11 @@ const categories = [
   "Insurance",
 ]
 
-export default function LandingPage() {
+export const revalidate = 300 // 5 minutes
+
+export default async function LandingPage() {
+  const stats = buildStats(await getPublicStatsSafe())
+
   return (
     <div className="min-h-screen bg-background">
       {/* Navigation */}

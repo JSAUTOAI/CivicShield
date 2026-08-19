@@ -2,7 +2,7 @@
 
 Your offline-safe reference for the project. If Claude is unavailable, your PC dies, or you need to hand this to someone else — this document + the GitHub repo + your `.env` backup is enough to rebuild everything.
 
-**Last updated:** 2026-04-18
+**Last updated:** 2026-04-18 (feature list partially corrected 2026-08-19 — see `README2.md` for current state)
 
 ---
 
@@ -37,13 +37,16 @@ Full system audit as of this file being written.
 - `/petitions` page itself — uses a hardcoded array (real GET endpoint exists at `/api/petitions`, just not wired)
 
 **Stubbed / not yet built:**
-- `/api/stripe/*` routes (checkout, portal, webhook) — Phase 2
-- Resend open-tracking webhook (`openedAt` field exists, nothing writes to it)
-- Svix signature verification on inbound webhook (header is checked but not validated)
+- Svix signature verification on both webhooks (headers are checked for presence but not validated)
 - HTML email template (complaints go out as plain text)
 - Create-petition UI ("Start a Petition" button is a stub)
 - In-app notifications system
-- Password reset endpoint (token infrastructure exists in schema)
+- Admin panel (no `/admin` routes; `role` column exists but nothing reads it)
+
+**Since built (corrections to the above — see README2.md):**
+- `/api/stripe/*` (checkout, portal, webhook) — all three implemented
+- Resend open-tracking webhook `/api/email/events` — implemented; was blocked by middleware until 19 Aug 2026
+- Password reset — `/forgot-password`, `/reset-password` + both API routes built 19 Aug 2026
 
 ### Database — 22 tables
 
@@ -152,6 +155,8 @@ npm run dev              # Opens on http://localhost:3001
 ```
 
 Demo login after seed: `jake@example.com` / `CivicShield2024!`
+
+**Note:** login also requires `emailVerified: true` — `auth.ts` rejects unverified accounts. If a seeded or legacy account can't sign in, that's usually why. Fix with `node --env-file=.env scripts/reset-password.mjs <email> <newPassword>`, which sets the password, verifies the email, and clears any lockout.
 
 ---
 

@@ -6,6 +6,7 @@ const publicPaths = [
   "/login",
   "/register",
   "/forgot-password",
+  "/reset-password",
   "/verify-email",
   "/api/auth/verify",
   "/api/auth/resend-verification",
@@ -14,8 +15,10 @@ const publicPaths = [
   "/privacy",
   "/terms",
   "/api/auth",
+  "/api/stats",
   "/api/stripe/webhook",
   "/api/email/inbound",
+  "/api/email/events",
 ]
 
 export async function middleware(req: NextRequest) {

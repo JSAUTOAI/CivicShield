@@ -15,6 +15,7 @@ function LoginForm() {
   const searchParams = useSearchParams()
   const callbackUrl = searchParams.get("callbackUrl") || "/"
   const verified = searchParams.get("verified") === "true"
+  const passwordReset = searchParams.get("reset") === "true"
   const tokenError = searchParams.get("error")
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState("")
@@ -69,6 +70,13 @@ function LoginForm() {
             <div className="mb-4 flex items-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400">
               <CheckCircle className="h-4 w-4 flex-shrink-0" />
               Email verified successfully. You can now sign in.
+            </div>
+          )}
+
+          {passwordReset && (
+            <div className="mb-4 flex items-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400">
+              <CheckCircle className="h-4 w-4 flex-shrink-0" />
+              Password updated. You can now sign in with your new password.
             </div>
           )}
 
