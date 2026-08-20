@@ -1,35 +1,46 @@
 // AI Legal Analysis Engine — powered by Claude API
 // Analyzes issues against UK law and generates structured legal analysis
 
+import Anthropic from "@anthropic-ai/sdk"
 import { resolveSourceUrl } from "./legal-sources"
 import { matchDefectPatterns, type DefectHub } from "./motoring-defect-hubs"
 
 /**
- * Fetch with automatic retry for transient errors (HTTP 529 overloaded).
- * Retries up to 3 times with increasing delays: 5s, 15s, 30s.
- * Non-529 errors are not retried.
+ * The model used for all legal analysis.
+ *
+ * Do NOT pin a dated snapshot here. This previously read
+ * "claude-sonnet-4-20250514"; Anthropic retired that model and every analysis
+ * began failing with a 404 — silently, because the route only recognised
+ * "overloaded" errors. Undated aliases like this one do not get withdrawn
+ * from under the app.
  */
-async function fetchWithRetry(
-  url: string,
-  options: RequestInit,
-  maxRetries = 3,
-  delays = [5000, 15000, 30000]
-): Promise<Response> {
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const response = await fetch(url, options)
+const ANALYSIS_MODEL = "claude-opus-5"
 
-    if (response.status === 529 && attempt < maxRetries) {
-      const delay = delays[attempt] || delays[delays.length - 1]
-      console.log(`Claude API overloaded (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${delay / 1000}s...`)
-      await new Promise((resolve) => setTimeout(resolve, delay))
-      continue
-    }
+/**
+ * Thinking tokens count toward max_tokens, and the response is a large JSON
+ * document (analysis + precedents + legislation + a full complaint letter).
+ * 4096 truncated it immediately; 16000 still truncated mid-array once thinking
+ * was included. The request is streamed because the SDK needs streaming at this
+ * size to stay under its HTTP timeout — the stream is collected server-side,
+ * nothing is streamed to the browser.
+ */
+const MAX_TOKENS = 32000
 
-    return response
+let anthropicClient: Anthropic | null = null
+
+function getAnthropic(): Anthropic {
+  if (!anthropicClient) {
+    anthropicClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
   }
+  return anthropicClient
+}
 
-  // Should not reach here, but safety net
-  throw new Error("AI service is currently overloaded. Please try again in a few minutes.")
+/** Raised when Claude declines the request outright, so callers can say so plainly. */
+export class AnalysisRefusedError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = "AnalysisRefusedError"
+  }
 }
 
 export interface RightsViolation {
@@ -300,32 +311,46 @@ Provide a full legal analysis with:
     }
   }
 
-  const response = await fetchWithRetry("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 4096,
-      system: systemPrompt,
-      messages: [{ role: "user", content: fullUserMessage }],
-    }),
+  // The SDK retries 429s, 5xx and connection errors on its own — this replaced
+  // a hand-rolled 529 retry loop.
+  const stream = getAnthropic().beta.messages.stream({
+    model: ANALYSIS_MODEL,
+    max_tokens: MAX_TOKENS,
+    system: systemPrompt,
+    messages: [{ role: "user", content: fullUserMessage }],
+    // Complaints describe police conduct, harassment and similar, so a safety
+    // refusal is a live possibility. Let the server retry on a model that will
+    // handle it rather than failing the user's analysis outright.
+    betas: ["server-side-fallback-2026-07-01"],
+    fallbacks: "default",
   })
 
-  if (!response.ok) {
-    const errorText = await response.text()
-    console.error("Claude API error:", errorText)
-    throw new Error(`AI analysis failed: ${response.status}`)
+  const response = await stream.finalMessage()
+
+  if (response.stop_reason === "refusal") {
+    console.error("Claude refused the analysis:", response.stop_details)
+    throw new AnalysisRefusedError(
+      "The AI declined to analyse this issue. Try rewording the description, or contact support if you believe this is wrong."
+    )
   }
 
-  const data = await response.json()
-  const content = data.content[0]?.text
+  // Must narrow by block type. Thinking is on by default for this model, so
+  // content[0] is a thinking block with no `text` field — indexing it directly
+  // yields undefined and looks like an empty response.
+  const content = response.content
+    .filter((block): block is Anthropic.TextBlock => block.type === "text")
+    .map((block) => block.text)
+    .join("")
+    .trim()
 
   if (!content) {
     throw new Error("Empty response from AI")
+  }
+
+  if (response.stop_reason === "max_tokens") {
+    console.warn(
+      `Analysis hit the ${MAX_TOKENS} token cap — the JSON is likely truncated.`
+    )
   }
 
   // Parse JSON from the response

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { db } from "@/lib/db"
-import { analyzeIssue } from "@/lib/ai-analysis"
+import Anthropic from "@anthropic-ai/sdk"
+import { analyzeIssue, AnalysisRefusedError } from "@/lib/ai-analysis"
 import { checkComplaintLimit, checkFollowUpLimit, isFollowUp } from "@/lib/subscription"
 
 export async function POST(
@@ -165,17 +166,52 @@ export async function POST(
     })
   } catch (error) {
     console.error("Analysis error:", error)
-    const message = (error as Error).message || ""
 
-    if (message.includes("overloaded") || message.includes("529")) {
+    // Claude declined the request outright — the user can act on this, so say so.
+    if (error instanceof AnalysisRefusedError) {
+      return NextResponse.json({ error: error.message }, { status: 422 })
+    }
+
+    // Typed SDK errors, most specific first. Previously everything except
+    // "overloaded" collapsed into "Failed to analyze issue", which is how a
+    // retired model ID went unnoticed for months — the 404 looked identical
+    // to every other failure.
+    if (error instanceof Anthropic.AuthenticationError) {
+      console.error("ANTHROPIC_API_KEY is invalid or revoked — analysis is down for everyone.")
       return NextResponse.json(
-        { error: "AI servers are currently experiencing delays. Please try again in a few minutes.", retryExhausted: true },
+        { error: "AI analysis is temporarily unavailable. Your issue has been saved and support has been notified." },
+        { status: 503 }
+      )
+    }
+
+    if (error instanceof Anthropic.RateLimitError) {
+      return NextResponse.json(
+        { error: "AI servers are busy right now. Your issue has been saved — try analysing again in a few minutes.", retryExhausted: true },
+        { status: 503 }
+      )
+    }
+
+    if (error instanceof Anthropic.NotFoundError) {
+      // Almost certainly a retired or mistyped model ID — an operator problem,
+      // not a user one. Make it unmistakable in the logs.
+      console.error(
+        "Claude returned 404 — the configured model may have been retired. Check ANALYSIS_MODEL in src/lib/ai-analysis.ts."
+      )
+      return NextResponse.json(
+        { error: "AI analysis is temporarily unavailable. Your issue has been saved and support has been notified." },
+        { status: 503 }
+      )
+    }
+
+    if (error instanceof Anthropic.APIError) {
+      return NextResponse.json(
+        { error: `AI analysis failed (${error.status}). Your issue has been saved — please try again.`, retryExhausted: true },
         { status: 503 }
       )
     }
 
     return NextResponse.json(
-      { error: "Failed to analyze issue" },
+      { error: "Failed to analyze issue. Your issue has been saved — you can retry from the issue page." },
       { status: 500 }
     )
   }
