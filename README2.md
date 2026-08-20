@@ -279,6 +279,89 @@ is requiring email verification before the first send.
 
 ---
 
+## 3d. AI cost and the timeout problem — measured 20 Aug 2026
+
+Jake topped the Anthropic account up to $23 after it ran dry. Before deciding
+how to spend it, one real issue (a stop-and-search complaint) was run through
+the app's own prompt on every sensible configuration.
+
+| Model | Effort | Cost | Time | Letter | Violations / Legislation / Precedents |
+|---|---|---|---|---|---|
+| claude-opus-5 | high *(was the default)* | **$0.51** | **239s** | 11,727 | 8 / 8 / 6 |
+| claude-opus-5 | medium | $0.38 | 171s | 10,905 | 7 / 8 / 6 |
+| claude-opus-5 | low | $0.31 | 139s | 9,221 | 7 / 7 / 6 |
+| claude-sonnet-5 | medium | $0.11 | 64s | 3,761 | 5 / 4 / 3 |
+| claude-sonnet-5 | low | $0.08 | 46s | 3,170 | 4 / 4 / 3 |
+
+**Two conclusions, both important.**
+
+**1. Cost was badly underestimated.** Earlier figures of "8-10p per complaint"
+were wrong — the real number at the shipped default was **40p**. The retired
+Sonnet 4 model cost roughly 4p and produced ~3,600-character letters, which is
+why heavy use previously cost almost nothing. Opus 5 produces 3× the output at
+5× the token price.
+
+**2. Every Opus configuration exceeds a serverless request timeout.** At 139-239
+seconds, no synchronous HTTP request survives — Vercel's Hobby ceiling is 60s
+and Pro's default is 300s. This is the real cause of "stuck on Analysing your
+issue", independent of the credit problem. Only Sonnet 5 at low effort (46s)
+fits inside 60s, and not with much margin.
+
+**The architectural answer is that analysis should not be answered inside the
+HTTP request at all** — it should be queued, with the page polling for
+completion. That also fixes the user experience, since nobody should watch a
+spinner for three minutes.
+
+### Changes made off the back of this
+
+- `ANALYSIS_MODEL` and `ANALYSIS_EFFORT` are now environment variables, so the
+  cost/quality trade-off can be tuned without a code change. Default effort
+  lowered from `high` to `medium`.
+- Every analysis now logs `[analysis-usage] model=… in=… out=… thinking=… cost=$…`.
+  The account ran to zero unnoticed because nothing recorded what was being
+  spent.
+- The server-side refusal fallback is now conditional on the model family —
+  Sonnet 5 rejects it with a 400, so switching model would previously have
+  broken analysis outright.
+
+### Unit economics at 40p vs 8p per complaint
+
+| Tier | Price | Included | Cost @ Opus 5 | Cost @ Sonnet 5 |
+|---|---|---|---|---|
+| Free | £0 | 3 lifetime | ~£1.20 given away | ~£0.25 |
+| Basic | £4.99 | 5/month | ~£1.50 | ~£0.32 |
+| Pro | £14.99 | 15/month | ~£4.50 | ~£0.96 |
+| Agency | £19.99 | 30/month | ~£9.00 | ~£1.92 |
+
+**Follow-ups are the unpriced risk.** Each one is another full generation, and
+the limits are 10 per complaint on Basic, 20 on Pro, 50 on Agency. A Basic user
+who used the lot would generate 55 analyses — around £22 of cost against £4.99
+of revenue. Nothing currently prevents this.
+
+---
+
+## 3e. Planned: single operations dashboard (not yet built)
+
+Jake's request, to be built once the site is more polished. One page showing
+everything that currently requires logging into five different services:
+
+- **Anthropic** — credit balance remaining, spend per day, cost per complaint,
+  and a warning before it runs dry (it going to zero silently killed analysis
+  for everyone on 20 Aug).
+- **Resend** — emails sent, delivered, bounced, monthly quota used, domain and
+  webhook health.
+- **Stripe** — active subscribers by tier, MRR, failed payments, churn.
+- **Platform** — users, issues, complaints sent/opened/replied, response rates
+  by organisation, S3 storage used.
+- **Health** — which integrations are actually configured and working, so a
+  missing key is visible rather than discovered by a user hitting an error.
+
+Ideally with the ability to act on it in place — top up credit, retry a failed
+payment — rather than only observing. Builds naturally on top of the admin
+panel already in the backlog, since both need the same `role`-gated area.
+
+---
+
 ## 4. Next up
 
 Roughly in priority order.

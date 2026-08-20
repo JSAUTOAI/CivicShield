@@ -14,7 +14,39 @@ import { matchDefectPatterns, type DefectHub } from "./motoring-defect-hubs"
  * "overloaded" errors. Undated aliases like this one do not get withdrawn
  * from under the app.
  */
-const ANALYSIS_MODEL = "claude-opus-5"
+const ANALYSIS_MODEL = process.env.ANALYSIS_MODEL || "claude-opus-5"
+
+/**
+ * Effort controls how much the model thinks and how much it writes.
+ *
+ * This is the main lever on both cost and wall-clock time. At the default
+ * ("high") a single analysis measured 19,969 output tokens, $0.51, and 239
+ * seconds — which is longer than any Vercel plan will keep a request open.
+ * Overridable per environment so the tradeoff can be tuned without a deploy.
+ */
+//
+// Measured on one real stop-and-search issue, 20 Aug 2026:
+//
+//   model            effort   cost    time   letter    violations/legislation/precedents
+//   claude-opus-5    high     $0.51   239s   11,727    8 / 8 / 6
+//   claude-opus-5    medium   $0.38   171s   10,905    7 / 8 / 6
+//   claude-opus-5    low      $0.31   139s    9,221    7 / 7 / 6
+//   claude-sonnet-5  medium   $0.11    64s    3,761    5 / 4 / 3
+//   claude-sonnet-5  low      $0.08    46s    3,170    4 / 4 / 3
+//
+// Note every Opus configuration exceeds any serverless request timeout, which
+// is why analysis must eventually move to a background job rather than being
+// answered inside the HTTP request.
+const ANALYSIS_EFFORT = (process.env.ANALYSIS_EFFORT || "medium") as
+  | "low"
+  | "medium"
+  | "high"
+  | "xhigh"
+  | "max"
+
+/** Only the Opus 5 / Fable 5 family accepts the server-side refusal fallback. */
+const SUPPORTS_FALLBACKS =
+  ANALYSIS_MODEL.startsWith("claude-opus-5") || ANALYSIS_MODEL.startsWith("claude-fable-5")
 
 /**
  * Thinking tokens count toward max_tokens, and the response is a large JSON
@@ -25,6 +57,49 @@ const ANALYSIS_MODEL = "claude-opus-5"
  * nothing is streamed to the browser.
  */
 const MAX_TOKENS = 32000
+
+/**
+ * Per-million-token prices in USD, for the cost line logged after each run.
+ * Update if Anthropic changes pricing — this is only used for logging, never
+ * for billing, so being slightly stale is harmless.
+ */
+const MODEL_PRICING: Record<string, { input: number; output: number }> = {
+  "claude-opus-5": { input: 5, output: 25 },
+  "claude-sonnet-5": { input: 3, output: 15 },
+  "claude-haiku-4-5": { input: 1, output: 5 },
+}
+
+/**
+ * Log what an analysis actually cost.
+ *
+ * Every generation is billed to the Anthropic account, on the free tier as
+ * much as the paid ones, so this is the platform's cost of goods. Without it
+ * the first sign of a problem is the balance hitting zero and analysis dying
+ * for everyone — which is exactly what happened on 20 Aug 2026.
+ */
+function logUsage(model: string, usage: Anthropic.Beta.BetaUsage | undefined): void {
+  if (!usage) return
+
+  const price = MODEL_PRICING[model]
+  const input = usage.input_tokens ?? 0
+  const output = usage.output_tokens ?? 0
+  // Thinking is billed as output and is a large share of the total here.
+  const thinking = usage.output_tokens_details?.thinking_tokens ?? 0
+
+  const parts = [
+    `model=${model}`,
+    `in=${input}`,
+    `out=${output}`,
+    `thinking=${thinking}`,
+  ]
+
+  if (price) {
+    const usd = (input / 1_000_000) * price.input + (output / 1_000_000) * price.output
+    parts.push(`cost=$${usd.toFixed(4)}`)
+  }
+
+  console.log(`[analysis-usage] ${parts.join(" ")}`)
+}
 
 let anthropicClient: Anthropic | null = null
 
@@ -321,11 +396,18 @@ Provide a full legal analysis with:
     // Complaints describe police conduct, harassment and similar, so a safety
     // refusal is a live possibility. Let the server retry on a model that will
     // handle it rather than failing the user's analysis outright.
-    betas: ["server-side-fallback-2026-07-01"],
-    fallbacks: "default",
+    output_config: { effort: ANALYSIS_EFFORT },
+    // Server-side refusal fallback is only accepted on the Opus 5 / Fable 5
+    // family — Sonnet 5 rejects it outright with a 400, so it has to be
+    // conditional or switching model breaks analysis entirely.
+    ...(SUPPORTS_FALLBACKS
+      ? { betas: ["server-side-fallback-2026-07-01"] as const, fallbacks: "default" as const }
+      : {}),
   })
 
   const response = await stream.finalMessage()
+
+  logUsage(response.model ?? ANALYSIS_MODEL, response.usage)
 
   if (response.stop_reason === "refusal") {
     console.error("Claude refused the analysis:", response.stop_details)
