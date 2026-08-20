@@ -159,8 +159,18 @@ export default function IssueDetailPage() {
 
   async function handleAnalyze() {
     setAnalyzing(true)
+
+    // Hard stop so the spinner can never run forever. If the server is cut off
+    // mid-analysis the browser is left holding an open request with nothing
+    // coming back, which reads as "stuck on Analysing your issue".
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 90_000)
+
     try {
-      const res = await fetch(`/api/issues/${issueId}/analyze`, { method: "POST" })
+      const res = await fetch(`/api/issues/${issueId}/analyze`, {
+        method: "POST",
+        signal: controller.signal,
+      })
       if (!res.ok) {
         const body = await res.json().catch(() => ({ error: "Failed" }))
         if (body.retryExhausted) {
@@ -173,8 +183,15 @@ export default function IssueDetailPage() {
       toast.success("Analysis complete! Complaint generated.")
       refetch()
     } catch (err) {
-      toast.error((err as Error).message)
+      if ((err as Error).name === "AbortError") {
+        toast.error(
+          "The analysis is taking longer than expected. Your issue has been saved — try running the analysis again from this page."
+        )
+      } else {
+        toast.error((err as Error).message)
+      }
     } finally {
+      clearTimeout(timeout)
       setAnalyzing(false)
     }
   }

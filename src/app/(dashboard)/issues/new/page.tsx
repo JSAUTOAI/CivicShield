@@ -151,6 +151,24 @@ export default function NewIssuePage() {
     [limits]
   )
 
+  /**
+   * Mirrors issueSchema in src/lib/validations.ts. The server stays the
+   * authority — this exists so a missing field is caught on the step it
+   * belongs to, with a message naming the field.
+   */
+  function requiredFieldProblems(): string[] {
+    const problems: string[] = []
+    if (!formData.category) problems.push("Choose a category")
+    if (!formData.issueType && !formData.category) problems.push("Choose an issue type")
+    if (!formData.description || formData.description.trim().length < 10) {
+      problems.push("Describe what happened in at least 10 characters")
+    }
+    if (!formData.organization?.trim()) problems.push("Enter the organisation involved")
+    if (!formData.dateOfIncident) problems.push("Enter the date of the incident")
+    if (!formData.location?.trim()) problems.push("Enter the location")
+    return problems
+  }
+
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
     setIsDragOver(false)
@@ -766,6 +784,16 @@ export default function NewIssuePage() {
             loading={submitting}
             onClick={async () => {
               if (currentStep === 2) {
+                // Check the required fields here rather than letting the server
+                // reject the whole submission after the user has already left
+                // the step the missing field lives on.
+                const missing = requiredFieldProblems()
+                if (missing.length > 0) {
+                  toast.error(missing.join(". "))
+                  setCurrentStep(0)
+                  return
+                }
+
                 // Submit issue and trigger analysis
                 setCurrentStep(3)
                 setSubmitting(true)
@@ -790,8 +818,20 @@ export default function NewIssuePage() {
                   })
 
                   if (!issueRes.ok) {
-                    const err = await issueRes.json()
-                    throw new Error(err.error || "Failed to create issue")
+                    const err = await issueRes.json().catch(() => ({}))
+                    // The API returns per-field detail; the old code threw away
+                    // `details` and showed a bare "Validation failed", which
+                    // told the user nothing about which field was wrong.
+                    const fieldErrors: string[] = Array.isArray(err.details)
+                      ? err.details.map(
+                          (d: { field?: string; message?: string }) => d.message || d.field || ""
+                        ).filter(Boolean)
+                      : []
+                    throw new Error(
+                      fieldErrors.length > 0
+                        ? fieldErrors.join(". ")
+                        : err.error || "Failed to create issue"
+                    )
                   }
 
                   const issue = await issueRes.json()
@@ -808,18 +848,36 @@ export default function NewIssuePage() {
                     }
                   }
 
-                  // Trigger AI analysis
-                  const analysisRes = await fetch(`/api/issues/${issue.id}/analyze`, {
-                    method: "POST",
-                  })
+                  // Trigger AI analysis. Aborts rather than leaving the user
+                  // on a spinner that never resolves if the server is cut off
+                  // mid-analysis — the issue is already saved either way.
+                  const analysisController = new AbortController()
+                  const analysisTimeout = setTimeout(() => analysisController.abort(), 90_000)
+
+                  let analysisRes: Response
+                  try {
+                    analysisRes = await fetch(`/api/issues/${issue.id}/analyze`, {
+                      method: "POST",
+                      signal: analysisController.signal,
+                    })
+                  } catch (analysisErr) {
+                    clearTimeout(analysisTimeout)
+                    toast.error(
+                      (analysisErr as Error).name === "AbortError"
+                        ? "The analysis is taking longer than expected. Your issue has been saved — run the analysis again from the issue page."
+                        : "Issue saved but analysis failed. You can retry from the issue page."
+                    )
+                    router.push(`/issues/${issue.id}`)
+                    return
+                  }
+                  clearTimeout(analysisTimeout)
 
                   if (!analysisRes.ok) {
                     const analysisBody = await analysisRes.json().catch(() => ({}))
-                    if (analysisBody.retryExhausted) {
-                      toast.error("AI servers are currently experiencing delays. Your issue has been saved — you can retry analysis from the issue page.")
-                    } else {
-                      toast.error("Issue saved but analysis failed. You can retry from the issue page.")
-                    }
+                    toast.error(
+                      analysisBody.error ||
+                        "Issue saved but analysis failed. You can retry from the issue page."
+                    )
                     router.push(`/issues/${issue.id}`)
                     return
                   }

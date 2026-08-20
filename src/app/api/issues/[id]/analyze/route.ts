@@ -5,6 +5,17 @@ import Anthropic from "@anthropic-ai/sdk"
 import { analyzeIssue, AnalysisRefusedError } from "@/lib/ai-analysis"
 import { checkComplaintLimit, checkFollowUpLimit, isFollowUp } from "@/lib/subscription"
 
+/**
+ * Legal analysis is a long call — Claude reasons over the issue and writes a
+ * full complaint letter. Vercel's default route timeout (10-15s) cuts that off
+ * mid-flight, which the browser shows as a spinner that never resolves.
+ *
+ * 60s is the ceiling on Vercel's Hobby plan, so this is the highest value that
+ * is safe on every plan. If analyses still time out, the options are a Pro plan
+ * (up to 300s) or moving analysis to a background job the page polls.
+ */
+export const maxDuration = 60
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -200,6 +211,27 @@ export async function POST(
       return NextResponse.json(
         { error: "AI analysis is temporarily unavailable. Your issue has been saved and support has been notified." },
         { status: 503 }
+      )
+    }
+
+    if (error instanceof Anthropic.BadRequestError) {
+      const detail = String(error.message || "")
+      // The single most likely 400 in production, and the old generic message
+      // ("AI analysis failed (400)") gave no clue that billing was the cause.
+      if (detail.toLowerCase().includes("credit balance")) {
+        console.error(
+          "ANTHROPIC CREDIT EXHAUSTED — analysis is down for every user until the " +
+            "account is topped up at console.anthropic.com -> Plans & Billing."
+        )
+        return NextResponse.json(
+          { error: "AI analysis is temporarily unavailable. Your issue has been saved and support has been notified — please try again shortly." },
+          { status: 503 }
+        )
+      }
+      console.error("Claude rejected the request:", detail)
+      return NextResponse.json(
+        { error: "AI analysis failed. Your issue has been saved — you can retry from the issue page." },
+        { status: 502 }
       )
     }
 
