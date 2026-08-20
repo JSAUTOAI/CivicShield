@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { verifyResendWebhook } from "@/lib/webhook-verify"
+import { notify } from "@/lib/notifications"
 
 /**
  * POST /api/email/events
@@ -59,7 +60,14 @@ export async function POST(request: Request) {
 
     const complaint = await db.complaint.findUnique({
       where: { id: complaintId },
-      select: { id: true, status: true, openedAt: true, respondedAt: true },
+      select: {
+        id: true,
+        status: true,
+        openedAt: true,
+        respondedAt: true,
+        recipientOrg: true,
+        issue: { select: { userId: true, organization: true } },
+      },
     })
 
     if (!complaint) {
@@ -76,6 +84,19 @@ export async function POST(request: Request) {
         if (complaint.status === "sent") update.status = "opened"
         if (Object.keys(update).length > 0) {
           await db.complaint.update({ where: { id: complaintId }, data: update })
+        }
+        // Only on the first open — organisations re-opening a thread should
+        // not generate a fresh notification each time.
+        // userId is nullable on Issue (anonymous submissions), and there is
+        // nobody to notify in that case.
+        if (!complaint.openedAt && complaint.issue.userId) {
+          await notify({
+            userId: complaint.issue.userId,
+            type: "complaint_opened",
+            title: `${complaint.recipientOrg || complaint.issue.organization} opened your complaint`,
+            body: "Your complaint has been opened. Organisations typically acknowledge within 14 days.",
+            link: `/complaints/${complaintId}`,
+          })
         }
         break
       }

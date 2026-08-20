@@ -47,6 +47,13 @@ export const resetPasswordSchema = z.object({
     .regex(/[0-9!@#$%^&*]/, "Password must contain at least one number or symbol"),
 })
 
+export const supportMessageSchema = z.object({
+  name: z.string().min(1, "Please tell us your name").max(100),
+  email: z.string().email("We need a valid email address to reply to"),
+  subject: z.string().min(3, "Please give your message a subject").max(200),
+  message: z.string().min(10, "Please describe the problem in a bit more detail").max(5000),
+})
+
 export const issueSchema = z.object({
   issueCategory: z.string().min(1, "Category is required"),
   issueType: z.string().min(1, "Issue type is required"),
@@ -87,6 +94,7 @@ export const dictionarySearchSchema = z.object({
 
 export type RegisterInput = z.infer<typeof registerSchema>
 export type LoginInput = z.infer<typeof loginSchema>
+export type SupportMessageInput = z.infer<typeof supportMessageSchema>
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>
 export type IssueInput = z.infer<typeof issueSchema>

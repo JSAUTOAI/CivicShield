@@ -4,6 +4,7 @@ import * as React from "react"
 import { cn } from "@/lib/utils"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { SupportForm } from "@/components/layout/support-form"
 import {
   ChevronDown,
   ChevronUp,
@@ -202,24 +203,7 @@ export default function HelpPage() {
       </div>
 
       {/* Contact CTA */}
-      <div className="mt-10 rounded-xl border border-border bg-muted/30 p-6 text-center animate-fade-in" style={{ animationDelay: "0.5s" }}>
-        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-brand-50 dark:bg-brand-900/20">
-          <HelpCircle className="h-6 w-6 text-brand-600 dark:text-brand-400" />
-        </div>
-        <h3 className="text-base font-semibold text-foreground">
-          Still need help?
-        </h3>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Get in touch with our support team and we&apos;ll get back to you within 2 business days.
-        </p>
-        <a
-          href="mailto:support@civicshield.co.uk"
-          className="mt-4 inline-flex items-center gap-2 rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-brand-700 dark:bg-brand-500 dark:hover:bg-brand-600"
-        >
-          <Mail className="h-4 w-4" />
-          support@civicshield.co.uk
-        </a>
-      </div>
+      <SupportForm />
     </div>
   )
 }

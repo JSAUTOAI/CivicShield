@@ -93,6 +93,7 @@ export const NAV_ITEMS = [
   { label: "New", href: "/issues/new", icon: "Plus" },
   { label: "Complaints", href: "/complaints", icon: "FileText" },
   { label: "Motoring", href: "/motoring", icon: "Car" },
+  { label: "Help", href: "/help", icon: "HelpCircle" },
 ] as const
 
 export const MORE_MENU_ITEMS = [

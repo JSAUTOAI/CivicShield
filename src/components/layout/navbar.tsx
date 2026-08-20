@@ -61,6 +61,31 @@ export function Navbar() {
   const [searchOpen, setSearchOpen] = React.useState(false)
   const [searchQuery, setSearchQuery] = React.useState("")
   const [searchResults, setSearchResults] = React.useState<any>(null)
+  const [unreadCount, setUnreadCount] = React.useState(0)
+
+  // Poll the unread count. countOnly keeps this a single indexed COUNT rather
+  // than fetching the notification bodies the navbar never renders.
+  React.useEffect(() => {
+    let cancelled = false
+
+    async function loadUnread() {
+      try {
+        const res = await fetch("/api/notifications?countOnly=true")
+        if (!res.ok) return
+        const body = await res.json()
+        if (!cancelled) setUnreadCount(body?.data?.unreadCount ?? 0)
+      } catch {
+        // Badge is cosmetic — never surface a failure here.
+      }
+    }
+
+    loadUnread()
+    const interval = setInterval(loadUnread, 60_000)
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [pathname])
   const moreRef = React.useRef<HTMLDivElement>(null)
   const profileRef = React.useRef<HTMLDivElement>(null)
 
@@ -213,13 +238,23 @@ export function Navbar() {
             )}
           </button>
 
-          {/* Notifications */}
-          <button className="relative flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+          {/* Notifications — count is real; the badge hides when there is nothing */}
+          <Link
+            href="/notifications"
+            aria-label={
+              unreadCount > 0
+                ? `Notifications (${unreadCount} unread)`
+                : "Notifications"
+            }
+            className="relative flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
             <Bell className="h-4.5 w-4.5" />
-            <span className="absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-brand-500 text-[10px] font-bold text-white">
-              3
-            </span>
-          </button>
+            {unreadCount > 0 && (
+              <span className="absolute right-1.5 top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand-500 px-1 text-[10px] font-bold text-white">
+                {unreadCount > 9 ? "9+" : unreadCount}
+              </span>
+            )}
+          </Link>
 
           {/* Profile */}
           <div ref={profileRef} className="relative ml-1">

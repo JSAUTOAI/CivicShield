@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 import { db } from "@/lib/db"
+import { sendWelcomeEmail } from "@/lib/email"
 
 export async function GET(request: NextRequest) {
   const token = request.nextUrl.searchParams.get("token")
@@ -37,6 +38,13 @@ export async function GET(request: NextRequest) {
       action: "email_verified",
     },
   })
+
+  // Welcome them now rather than at registration, so it doesn't arrive
+  // alongside the verification email. Never block verification on it.
+  const welcome = await sendWelcomeEmail(user.email, user.fullName || undefined)
+  if (!welcome.success) {
+    console.error(`Welcome email failed for user ${user.id}:`, welcome.error)
+  }
 
   return NextResponse.redirect(new URL("/login?verified=true", request.url))
 }

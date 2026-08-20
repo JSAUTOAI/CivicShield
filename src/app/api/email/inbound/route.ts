@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { parseReplyToAddress } from "@/lib/email"
 import { verifyResendWebhook } from "@/lib/webhook-verify"
+import { notify } from "@/lib/notifications"
 
 /**
  * POST /api/email/inbound
@@ -58,7 +59,13 @@ export async function POST(request: Request) {
     // Find the complaint
     const complaint = await db.complaint.findUnique({
       where: { id: complaintId },
-      select: { id: true, status: true, respondedAt: true },
+      select: {
+        id: true,
+        status: true,
+        respondedAt: true,
+        recipientOrg: true,
+        issue: { select: { userId: true, organization: true } },
+      },
     })
 
     if (!complaint) {
@@ -80,6 +87,18 @@ export async function POST(request: Request) {
         status: "responded",
       },
     })
+
+    // The moment a user most wants to hear from us. userId is nullable on
+    // Issue (anonymous submissions) — nobody to notify in that case.
+    if (complaint.issue.userId) {
+      await notify({
+        userId: complaint.issue.userId,
+        type: "reply_received",
+        title: `${complaint.recipientOrg || complaint.issue.organization} replied to your complaint`,
+        body: responseContent.slice(0, 200),
+        link: `/complaints/${complaintId}`,
+      })
+    }
 
     console.log(`Inbound reply stored for complaint ${complaintId} from ${senderAddress}`)
 

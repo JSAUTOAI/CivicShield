@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { db } from "@/lib/db"
 import { complaintUpdateSchema } from "@/lib/validations"
 import { incrementEmailSendCount } from "@/lib/subscription"
+import { notify } from "@/lib/notifications"
 import { sendComplaintEmail, getReplyToAddress } from "@/lib/email"
 
 // GET /api/complaints/[id]
@@ -159,6 +160,19 @@ export async function PATCH(
       where: { id: parseInt(id) },
       data: updateData,
     })
+
+    if (updateData.status === "sent") {
+      await notify({
+        userId: parseInt(session.user.id),
+        type: "complaint_sent",
+        title: `Complaint sent to ${complaint.recipientOrg || existing.issue.organization}`,
+        body:
+          complaint.sentVia === "email"
+            ? `Delivered by email to ${complaint.recipientEmail}. We'll let you know if they open it or reply.`
+            : "Marked as sent manually — no recipient email was available, so send it yourself and keep a record.",
+        link: `/complaints/${complaint.id}`,
+      })
+    }
 
     return NextResponse.json(complaint)
   } catch (error) {

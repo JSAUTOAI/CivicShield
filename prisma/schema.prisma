@@ -50,6 +50,8 @@ model User {
   encryptedData      EncryptedData[]
   signatures         Signature[]
   publicProfile      PublicUserProfile?
+  notifications      Notification[]
+  supportMessages    SupportMessage[]
 
   @@map("users")
 }
@@ -551,4 +553,45 @@ model SubmissionTarget {
   updatedAt        DateTime @default(now()) @updatedAt @map("updated_at")
 
   @@map("submission_targets")
+}
+
+model Notification {
+  id        Int       @id @default(autoincrement())
+  userId    Int       @map("user_id")
+  // e.g. complaint_sent, complaint_opened, reply_received, analysis_complete
+  type      String
+  title     String
+  body      String?
+  // In-app path to open when the notification is clicked, e.g. /complaints/12
+  link      String?
+  readAt    DateTime? @map("read_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Unread-count and list queries both filter by user and order by recency.
+  @@index([userId, readAt])
+  @@index([userId, createdAt])
+  @@map("notifications")
+}
+
+model SupportMessage {
+  id        Int       @id @default(autoincrement())
+  // Null for messages sent by someone who is not signed in.
+  userId    Int?      @map("user_id")
+  name      String
+  email     String
+  subject   String
+  message   String
+  // Tier at the time of writing, so context survives a later upgrade.
+  userTier  String?   @map("user_tier")
+  status    String    @default("open")
+  // Set once the email to support@ actually went out; null means it did not.
+  emailedAt DateTime? @map("emailed_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@map("support_messages")
 }
