@@ -194,7 +194,37 @@ export default function IssueDetailPage() {
         }
         return
       }
-      toast.success("Analysis complete! Complaint generated.")
+      // Second call writes the letter. Split so neither request exceeds the
+      // serverless timeout — see src/lib/ai-analysis.ts.
+      const body = await res.json().catch(() => ({}))
+      if (body?.letterPending !== false) {
+        toast.success("Analysis complete — drafting your complaint letter...")
+        refetch()
+
+        const letterController = new AbortController()
+        const letterTimeout = setTimeout(() => letterController.abort(), 90_000)
+        try {
+          const letterRes = await fetch(`/api/issues/${issueId}/complaint`, {
+            method: "POST",
+            signal: letterController.signal,
+          })
+          if (!letterRes.ok) {
+            const lb = await letterRes.json().catch(() => ({}))
+            throw new Error(lb.error || "Could not draft the letter")
+          }
+          toast.success("Complaint letter ready.")
+        } catch (letterErr) {
+          toast.error(
+            (letterErr as Error).name === "AbortError"
+              ? "Drafting the letter is taking longer than expected. Your analysis is saved — try again from this page."
+              : (letterErr as Error).message
+          )
+        } finally {
+          clearTimeout(letterTimeout)
+        }
+      } else {
+        toast.success("Analysis complete! Complaint generated.")
+      }
       refetch()
     } catch (err) {
       if ((err as Error).name === "AbortError") {

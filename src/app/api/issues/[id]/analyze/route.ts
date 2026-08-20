@@ -143,11 +143,14 @@ export async function POST(
       },
     })
 
-    // Auto-generate complaint and save as draft
+    // Create the draft complaint with the recipient details the analysis found.
+    // The letter body itself is written by a second call to
+    // POST /api/issues/[id]/complaint — see the split explained in
+    // src/lib/ai-analysis.ts. complaintText is intentionally empty here.
     const complaint = await db.complaint.create({
       data: {
         issueId: issue.id,
-        complaintText: analysis.complaintText,
+        complaintText: analysis.complaintText || "",
         recipientName: analysis.complaintRecipient.name,
         recipientOrg: analysis.complaintRecipient.organization,
         recipientAddress: analysis.complaintRecipient.address,
@@ -186,6 +189,8 @@ export async function POST(
       analysis: legalAnalysis,
       complaint,
       result: analysis,
+      // Tells the client the letter still needs generating in a second call.
+      letterPending: !complaint.complaintText,
     })
   } catch (error) {
     console.error("Analysis error:", error)

@@ -882,7 +882,31 @@ export default function NewIssuePage() {
                     return
                   }
 
-                  toast.success("Issue analyzed successfully!")
+                  // Second call writes the letter. Kept separate so neither
+                  // request exceeds the serverless timeout.
+                  const analysisBody = await analysisRes.json().catch(() => ({}))
+                  if (analysisBody?.letterPending !== false) {
+                    const letterController = new AbortController()
+                    const letterTimeout = setTimeout(() => letterController.abort(), 90_000)
+                    try {
+                      const letterRes = await fetch(`/api/issues/${issue.id}/complaint`, {
+                        method: "POST",
+                        signal: letterController.signal,
+                      })
+                      if (!letterRes.ok) {
+                        const lb = await letterRes.json().catch(() => ({}))
+                        toast.error(lb.error || "Analysis saved, but the letter could not be drafted. You can retry from the issue page.")
+                      } else {
+                        toast.success("Analysis and complaint letter ready.")
+                      }
+                    } catch {
+                      toast.error("Analysis saved, but drafting the letter timed out. You can retry from the issue page.")
+                    } finally {
+                      clearTimeout(letterTimeout)
+                    }
+                  } else {
+                    toast.success("Issue analyzed successfully!")
+                  }
                   router.push(`/issues/${issue.id}`)
                 } catch (err) {
                   toast.error((err as Error).message)

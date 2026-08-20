@@ -270,6 +270,52 @@ RESPOND IN VALID JSON matching this exact structure:
   ]
 }`
 
+/**
+ * The work is deliberately split into two API calls.
+ *
+ * Producing the analysis AND the full complaint letter in one request measured
+ * 46-239 seconds depending on model, and Vercel's Hobby plan kills any request
+ * at 60s — a single call cannot complete in production at all. Splitting also
+ * reads better: the user sees their legal analysis in around 20 seconds rather
+ * than watching a spinner while a 12,000-character letter is written.
+ */
+const ANALYSIS_ONLY_SUFFIX = `
+
+THIS REQUEST IS ANALYSIS ONLY.
+Set "complaintText" to an empty string "" and do NOT write the letter — it is
+generated separately in a later step. Still fill in "complaintRecipient" and
+"ccRecipients" accurately, since those are needed to address the letter.
+
+Keep the analysis tight and high-value. Quality over quantity:
+- at most 5 rights violations, strongest first
+- at most 5 pieces of legislation, the ones actually engaged
+- at most 4 case law precedents, the most directly on point
+- at most 5 recommended actions
+Do not pad the list to reach these numbers. Two precise, well-cited precedents
+beat six loose ones.
+
+This bound exists for a practical reason as well as a quality one: the response
+must be generated inside a serverless request timeout, and an unbounded list of
+citations is what pushes it over.`
+
+const LETTER_ONLY_SYSTEM_PROMPT = `You are a UK legal drafting AI for CivicShield. You write formal complaint letters on behalf of UK citizens.
+
+You will be given an issue and a completed legal analysis of it. Your job is to write the letter — do not redo the analysis.
+
+Rules:
+- Professional, solicitor-grade, and formal in tone.
+- Use the complainant's REAL name, address, email and phone where provided. Do NOT use placeholders like [Your Name] when real details are available.
+- Cite the specific legislation and case law supplied in the analysis, accurately, by name and section.
+- Address it to the correct complaints department at the organisation.
+- Include today's date.
+- Demand acknowledgement within 14 days and a full response within 28 days.
+- Set out the facts, then the legal basis, then the remedy sought.
+
+Return ONLY valid JSON in exactly this shape, with no markdown and no commentary:
+{
+  "complaintText": "The full letter as plain text, including addresses and date."
+}`
+
 const MOTORING_SYSTEM_PROMPT_SUPPLEMENT = `
 
 MOTORING-SPECIFIC INSTRUCTIONS (this issue is a motoring/vehicle complaint):
@@ -391,7 +437,7 @@ Provide a full legal analysis with:
 6. Recommended actions the complainant should take`
 
   // Motoring-specific augmentation
-  let systemPrompt = ANALYSIS_SYSTEM_PROMPT
+  let systemPrompt = ANALYSIS_SYSTEM_PROMPT + ANALYSIS_ONLY_SUFFIX
   let fullUserMessage = userMessage
 
   if (issue.issueCategory === "Motoring & Vehicle Issues") {
@@ -665,4 +711,137 @@ Yours faithfully,
       },
     ],
   }
+}
+
+/**
+ * Write the complaint letter, given an issue and its completed analysis.
+ *
+ * The second half of the split described above. Deliberately does not redo the
+ * analysis — it is handed the violations, legislation and precedents already
+ * found, so this call is short enough to finish inside a serverless request.
+ */
+export async function generateComplaintLetter(params: {
+  issue: {
+    issueCategory: string
+    issueType: string
+    description: string
+    organization: string
+    individual?: string | null
+    dateOfIncident: string
+    timeOfIncident?: string | null
+    location: string
+    userRole: string
+    complainantName?: string | null
+    complainantEmail?: string | null
+    complainantAddress?: string | null
+    complainantPhone?: string | null
+    subscriptionTier?: string | null
+  }
+  analysis: Pick<
+    LegalAnalysisResult,
+    "summary" | "rightsViolations" | "legislation" | "precedents" | "complaintRecipient"
+  >
+}): Promise<string> {
+  const { issue, analysis } = params
+
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return getMockAnalysis(issue).complaintText
+  }
+
+  const config = getAnalysisConfig(issue.subscriptionTier)
+
+  const complainant = [
+    issue.complainantName ? `NAME: ${issue.complainantName}` : null,
+    issue.complainantEmail ? `EMAIL: ${issue.complainantEmail}` : null,
+    issue.complainantAddress ? `ADDRESS: ${issue.complainantAddress}` : null,
+    issue.complainantPhone ? `PHONE: ${issue.complainantPhone}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n")
+
+  const recipient = analysis.complaintRecipient
+
+  const userMessage = `Write the formal complaint letter for this issue.
+
+THE ISSUE
+Category: ${issue.issueCategory}
+Type: ${issue.issueType}
+Organisation: ${issue.organization}
+${issue.individual ? `Individual involved: ${issue.individual}` : ""}
+Date: ${issue.dateOfIncident}${issue.timeOfIncident ? ` at ${issue.timeOfIncident}` : ""}
+Location: ${issue.location}
+Complainant's role: ${issue.userRole}
+
+What happened, in the complainant's words:
+${issue.description}
+
+COMPLAINANT DETAILS
+${complainant || "Not provided — use [Your Name], [Your Address] etc. placeholders"}
+
+ADDRESS THE LETTER TO
+${recipient?.name || "The Complaints Manager"}
+${recipient?.organization || issue.organization}
+${recipient?.address || ""}
+${recipient?.email ? `Email: ${recipient.email}` : ""}
+
+THE LEGAL ANALYSIS (already completed — cite this, do not redo it)
+Summary: ${analysis.summary}
+
+Rights violations identified:
+${(analysis.rightsViolations || []).map((v) => `- ${v.type} (${v.severity}): ${v.description}`).join("\n")}
+
+Legislation to cite:
+${(analysis.legislation || []).map((l) => `- ${l.actTitle}: ${l.legalDeclaration || l.description}`).join("\n")}
+
+Case law to cite:
+${(analysis.precedents || []).map((p) => `- ${p.caseName} ${p.caseReference} (${p.court}): ${p.keyPrinciple}`).join("\n")}`
+
+  const stream = getAnthropic().beta.messages.stream({
+    model: config.model,
+    max_tokens: MAX_TOKENS,
+    system: LETTER_ONLY_SYSTEM_PROMPT,
+    messages: [{ role: "user", content: userMessage }],
+    output_config: { effort: config.effort },
+    ...(config.isPremium
+      ? { betas: ["server-side-fallback-2026-07-01"] as const, fallbacks: "default" as const }
+      : {}),
+  })
+
+  const response = await stream.finalMessage()
+
+  logUsage(response.model ?? config.model, response.usage)
+
+  if (response.stop_reason === "refusal") {
+    console.error("Claude refused to draft the letter:", response.stop_details)
+    throw new AnalysisRefusedError(
+      "The AI declined to draft this letter. Try rewording the description, or contact support if you believe this is wrong."
+    )
+  }
+
+  const content = response.content
+    .filter((block): block is Anthropic.TextBlock => block.type === "text")
+    .map((block) => block.text)
+    .join("")
+    .trim()
+
+  if (!content) throw new Error("Empty response from AI")
+
+  if (response.stop_reason === "max_tokens") {
+    console.warn(`Letter hit the ${MAX_TOKENS} token cap — it is likely truncated.`)
+  }
+
+  // The model is asked for JSON, but a letter is prose — if the JSON wrapper is
+  // missing or malformed, the raw text is still a usable letter. Falling back
+  // beats failing the whole request over a formatting slip.
+  const jsonMatch = content.match(/\{[\s\S]*\}/)
+  if (jsonMatch) {
+    try {
+      const parsed = JSON.parse(jsonMatch[0]) as { complaintText?: string }
+      if (parsed.complaintText) return parsed.complaintText
+    } catch {
+      console.warn("Letter response was not valid JSON — using the raw text.")
+    }
+  }
+
+  return content
 }
