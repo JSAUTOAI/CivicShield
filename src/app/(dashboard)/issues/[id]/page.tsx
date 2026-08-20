@@ -36,6 +36,8 @@ import {
   Loader2,
   Lightbulb,
   X,
+  Sparkles,
+  ArrowRight,
 } from "lucide-react"
 
 // Types for the JSON stored in legalAnalysis table
@@ -107,6 +109,18 @@ export default function IssueDetailPage() {
   const issue = response?.data || (response as unknown as IssueDetail)
   const [complaintText, setComplaintText] = React.useState("")
   const [analyzing, setAnalyzing] = React.useState(false)
+  const [tier, setTier] = React.useState<string | null>(null)
+  const [premiumLive, setPremiumLive] = React.useState(false)
+
+  React.useEffect(() => {
+    fetch("/api/subscription/usage")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((b) => {
+        setTier(b?.data?.tier ?? null)
+        setPremiumLive(Boolean(b?.data?.premiumAnalysisLive))
+      })
+      .catch(() => {}) // purely for an upgrade prompt — never block the page
+  }, [])
   const [saving, setSaving] = React.useState(false)
   const [showSendConfirm, setShowSendConfirm] = React.useState(false)
   const [truthChecked, setTruthChecked] = React.useState(false)
@@ -358,6 +372,35 @@ export default function IssueDetailPage() {
           {hasAnalysis ? "Legal Analysis" : "Issue Details"}
         </h1>
       </div>
+
+      {/* Free users get the standard model — show what upgrading buys. */}
+      {hasAnalysis && tier === "free" && premiumLive && (
+        <Card className="mb-6 border-brand-200 bg-brand-50/50 dark:border-brand-900 dark:bg-brand-900/10 animate-fade-in">
+          <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-brand-100 dark:bg-brand-900/30">
+                <Sparkles className="h-4.5 w-4.5 text-brand-600 dark:text-brand-400" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-foreground">
+                  This is a standard analysis
+                </p>
+                <p className="mt-0.5 text-sm text-muted-foreground">
+                  Paid plans run your issue through our most capable AI — noticeably
+                  deeper case law, more legislation cited, and a longer, more
+                  thorough complaint letter. From £4.99 a month.
+                </p>
+              </div>
+            </div>
+            <Link href="/pricing" className="flex-shrink-0">
+              <Button variant="brand" size="sm" className="w-full gap-1.5 sm:w-auto">
+                See plans
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Issue Summary */}
       <Card className="mb-6 animate-fade-in" style={{ animationDelay: "0.05s" }}>

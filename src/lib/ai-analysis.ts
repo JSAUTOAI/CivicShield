@@ -14,39 +14,60 @@ import { matchDefectPatterns, type DefectHub } from "./motoring-defect-hubs"
  * "overloaded" errors. Undated aliases like this one do not get withdrawn
  * from under the app.
  */
-const ANALYSIS_MODEL = process.env.ANALYSIS_MODEL || "claude-opus-5"
-
 /**
- * Effort controls how much the model thinks and how much it writes.
+ * Model and effort, chosen per subscription tier.
  *
- * This is the main lever on both cost and wall-clock time. At the default
- * ("high") a single analysis measured 19,969 output tokens, $0.51, and 239
- * seconds — which is longer than any Vercel plan will keep a request open.
- * Overridable per environment so the tradeoff can be tuned without a deploy.
+ * Measured on one real stop-and-search issue, 20 Aug 2026:
+ *
+ *   model            effort   cost    time   letter    violations/legislation/precedents
+ *   claude-opus-5    high     $0.51   239s   11,727    8 / 8 / 6
+ *   claude-opus-5    medium   $0.38   171s   10,905    7 / 8 / 6
+ *   claude-opus-5    low      $0.31   139s    9,221    7 / 7 / 6
+ *   claude-sonnet-5  medium   $0.11    64s    3,761    5 / 4 / 3
+ *   claude-sonnet-5  low      $0.08    46s    3,170    4 / 4 / 3
+ *
+ * IMPORTANT — the defaults below are constrained by hosting, not by taste.
+ * Vercel's Hobby plan kills any request at 60 seconds, so every Opus
+ * configuration (139-239s) times out and the user sees a spinner that never
+ * resolves. Until the project moves to Vercel Pro, both tiers must use a
+ * configuration that finishes inside 60s.
+ *
+ * ON UPGRADING TO VERCEL PRO, change two things:
+ *   1. maxDuration in src/app/api/issues/[id]/analyze/route.ts  ->  300
+ *   2. ANALYSIS_MODEL_PAID=claude-opus-5 and ANALYSIS_EFFORT_PAID=medium
+ *      (environment variable, no code change needed)
+ *
+ * The proper fix for both cost and user experience is to stop answering
+ * analysis inside the HTTP request at all — queue it and let the page poll.
  */
-//
-// Measured on one real stop-and-search issue, 20 Aug 2026:
-//
-//   model            effort   cost    time   letter    violations/legislation/precedents
-//   claude-opus-5    high     $0.51   239s   11,727    8 / 8 / 6
-//   claude-opus-5    medium   $0.38   171s   10,905    7 / 8 / 6
-//   claude-opus-5    low      $0.31   139s    9,221    7 / 7 / 6
-//   claude-sonnet-5  medium   $0.11    64s    3,761    5 / 4 / 3
-//   claude-sonnet-5  low      $0.08    46s    3,170    4 / 4 / 3
-//
-// Note every Opus configuration exceeds any serverless request timeout, which
-// is why analysis must eventually move to a background job rather than being
-// answered inside the HTTP request.
-const ANALYSIS_EFFORT = (process.env.ANALYSIS_EFFORT || "medium") as
-  | "low"
-  | "medium"
-  | "high"
-  | "xhigh"
-  | "max"
+const FREE_MODEL = process.env.ANALYSIS_MODEL_FREE || "claude-sonnet-5"
+const FREE_EFFORT = process.env.ANALYSIS_EFFORT_FREE || "low"
 
-/** Only the Opus 5 / Fable 5 family accepts the server-side refusal fallback. */
-const SUPPORTS_FALLBACKS =
-  ANALYSIS_MODEL.startsWith("claude-opus-5") || ANALYSIS_MODEL.startsWith("claude-fable-5")
+// Deliberately Sonnet at low effort while on Hobby — see the note above.
+// Sonnet 5 at medium measured 64s, which is already over the 60s ceiling, so
+// even the paid tier has no headroom until the plan changes.
+const PAID_MODEL = process.env.ANALYSIS_MODEL_PAID || "claude-sonnet-5"
+const PAID_EFFORT = process.env.ANALYSIS_EFFORT_PAID || "low"
+
+export type AnalysisEffort = "low" | "medium" | "high" | "xhigh" | "max"
+
+export interface AnalysisConfig {
+  model: string
+  effort: AnalysisEffort
+  /** True when this tier is getting the better model — drives UI messaging. */
+  isPremium: boolean
+}
+
+/** Which model a given subscription tier gets. */
+export function getAnalysisConfig(tier?: string | null): AnalysisConfig {
+  const paid = tier === "basic" || tier === "pro" || tier === "agency"
+  const model = paid ? PAID_MODEL : FREE_MODEL
+  return {
+    model,
+    effort: (paid ? PAID_EFFORT : FREE_EFFORT) as AnalysisEffort,
+    isPremium: model.startsWith("claude-opus") || model.startsWith("claude-fable"),
+  }
+}
 
 /**
  * Thinking tokens count toward max_tokens, and the response is a large JSON
@@ -60,8 +81,7 @@ const MAX_TOKENS = 32000
 
 /**
  * Per-million-token prices in USD, for the cost line logged after each run.
- * Update if Anthropic changes pricing — this is only used for logging, never
- * for billing, so being slightly stale is harmless.
+ * Logging only — never used for billing, so being slightly stale is harmless.
  */
 const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   "claude-opus-5": { input: 5, output: 25 },
@@ -74,8 +94,8 @@ const MODEL_PRICING: Record<string, { input: number; output: number }> = {
  *
  * Every generation is billed to the Anthropic account, on the free tier as
  * much as the paid ones, so this is the platform's cost of goods. Without it
- * the first sign of a problem is the balance hitting zero and analysis dying
- * for everyone — which is exactly what happened on 20 Aug 2026.
+ * the first sign of trouble is the balance hitting zero and analysis dying for
+ * everyone — which is exactly what happened on 20 Aug 2026.
  */
 function logUsage(model: string, usage: Anthropic.Beta.BetaUsage | undefined): void {
   if (!usage) return
@@ -83,15 +103,10 @@ function logUsage(model: string, usage: Anthropic.Beta.BetaUsage | undefined): v
   const price = MODEL_PRICING[model]
   const input = usage.input_tokens ?? 0
   const output = usage.output_tokens ?? 0
-  // Thinking is billed as output and is a large share of the total here.
+  // Thinking is billed as output and is a meaningful share of the total.
   const thinking = usage.output_tokens_details?.thinking_tokens ?? 0
 
-  const parts = [
-    `model=${model}`,
-    `in=${input}`,
-    `out=${output}`,
-    `thinking=${thinking}`,
-  ]
+  const parts = [`model=${model}`, `in=${input}`, `out=${output}`, `thinking=${thinking}`]
 
   if (price) {
     const usd = (input / 1_000_000) * price.input + (output / 1_000_000) * price.output
@@ -325,6 +340,8 @@ export async function analyzeIssue(issue: {
     complaintUrl?: string | null
     department?: string | null
   } | null
+  /** Effective subscription tier — decides which model runs. */
+  subscriptionTier?: string | null
 }): Promise<LegalAnalysisResult> {
   const apiKey = process.env.ANTHROPIC_API_KEY
 
@@ -388,26 +405,30 @@ Provide a full legal analysis with:
 
   // The SDK retries 429s, 5xx and connection errors on its own — this replaced
   // a hand-rolled 529 retry loop.
+  const config = getAnalysisConfig(issue.subscriptionTier)
+
   const stream = getAnthropic().beta.messages.stream({
-    model: ANALYSIS_MODEL,
+    model: config.model,
     max_tokens: MAX_TOKENS,
     system: systemPrompt,
     messages: [{ role: "user", content: fullUserMessage }],
     // Complaints describe police conduct, harassment and similar, so a safety
     // refusal is a live possibility. Let the server retry on a model that will
     // handle it rather than failing the user's analysis outright.
-    output_config: { effort: ANALYSIS_EFFORT },
+    output_config: { effort: config.effort },
     // Server-side refusal fallback is only accepted on the Opus 5 / Fable 5
     // family — Sonnet 5 rejects it outright with a 400, so it has to be
     // conditional or switching model breaks analysis entirely.
-    ...(SUPPORTS_FALLBACKS
+    // Only the Opus 5 / Fable 5 family accepts the server-side refusal
+    // fallback — Sonnet 5 rejects it with a 400, so it must be conditional.
+    ...(config.isPremium
       ? { betas: ["server-side-fallback-2026-07-01"] as const, fallbacks: "default" as const }
       : {}),
   })
 
   const response = await stream.finalMessage()
 
-  logUsage(response.model ?? ANALYSIS_MODEL, response.usage)
+  logUsage(response.model ?? config.model, response.usage)
 
   if (response.stop_reason === "refusal") {
     console.error("Claude refused the analysis:", response.stop_details)

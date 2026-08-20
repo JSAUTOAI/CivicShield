@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth"
 import { db } from "@/lib/db"
 import Anthropic from "@anthropic-ai/sdk"
 import { analyzeIssue, AnalysisRefusedError } from "@/lib/ai-analysis"
-import { checkComplaintLimit, checkFollowUpLimit, isFollowUp } from "@/lib/subscription"
+import { checkComplaintLimit, checkFollowUpLimit, isFollowUp, getEffectiveTier } from "@/lib/subscription"
 
 /**
  * Legal analysis is a long call — Claude reasons over the issue and writes a
@@ -69,7 +69,14 @@ export async function POST(
       }),
       db.user.findUnique({
         where: { id: userId },
-        select: { fullName: true, email: true, address: true, phone: true },
+        select: {
+          fullName: true,
+          email: true,
+          address: true,
+          phone: true,
+          subscriptionTier: true,
+          subscriptionStatus: true,
+        },
       }),
     ])
 
@@ -93,6 +100,11 @@ export async function POST(
       complainantAddress: issue.isAnonymous ? null : user?.address,
       complainantPhone: issue.isAnonymous ? null : user?.phone,
       organizationMetadata: issue.organizationMetadata as Record<string, string | null> | null,
+      // Paying users get the stronger model; free users get the faster,
+      // cheaper one. See getAnalysisConfig in src/lib/ai-analysis.ts.
+      subscriptionTier: user
+        ? getEffectiveTier(user.subscriptionTier ?? "free", user.subscriptionStatus)
+        : "free",
     })
 
     // Store the analysis

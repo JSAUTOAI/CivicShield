@@ -1,4 +1,5 @@
 import { db } from "@/lib/db"
+import { getAnalysisConfig } from "@/lib/ai-analysis"
 
 export type SubscriptionTier = "free" | "basic" | "pro" | "agency"
 
@@ -11,6 +12,14 @@ export interface TierLimits {
   features: string[]
 }
 
+/**
+ * Follow-up allowances were reduced on 21 Aug 2026 (Basic 10->3, Pro 20->5,
+ * Agency 50->10). Each follow-up is a full AI generation costing 8-40p, and
+ * the original numbers were set when a generation cost about 4p — a Basic user
+ * using all 10 follow-ups on 5 complaints would have cost roughly £22 against
+ * £4.99 of revenue. Three follow-ups still covers a normal complaint chain:
+ * initial, chase, escalation.
+ */
 export const TIER_LIMITS: Record<SubscriptionTier, TierLimits> = {
   free: {
     complaintsPerMonth: null,
@@ -23,7 +32,7 @@ export const TIER_LIMITS: Record<SubscriptionTier, TierLimits> = {
   basic: {
     complaintsPerMonth: 5,
     complaintsTotal: null,
-    followUpsPerComplaint: 10,
+    followUpsPerComplaint: 3,
     maxFilesPerIssue: 5,
     maxFileSizeMB: 200,
     // "case-builder-locked" = visible but not usable, per the launch decision.
@@ -34,7 +43,7 @@ export const TIER_LIMITS: Record<SubscriptionTier, TierLimits> = {
   pro: {
     complaintsPerMonth: 15,
     complaintsTotal: null,
-    followUpsPerComplaint: 20,
+    followUpsPerComplaint: 5,
     maxFilesPerIssue: 15,
     maxFileSizeMB: 500,
     features: [
@@ -48,7 +57,7 @@ export const TIER_LIMITS: Record<SubscriptionTier, TierLimits> = {
   agency: {
     complaintsPerMonth: 30,
     complaintsTotal: null,
-    followUpsPerComplaint: 50,
+    followUpsPerComplaint: 10,
     maxFilesPerIssue: 50,
     maxFileSizeMB: 2048,
     features: [
@@ -320,6 +329,9 @@ export async function getUsageStats(userId: number) {
     maxFileSizeMB: limits.maxFileSizeMB,
     features: limits.features,
     isLifetimeLimit: tier === "free",
+    // Whether paying tiers are currently running the stronger model. Lets the
+    // UI show the upgrade prompt only when it would actually be true.
+    premiumAnalysisLive: getAnalysisConfig("pro").isPremium,
   }
 }
 

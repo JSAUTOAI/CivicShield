@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { getAnalysisConfig } from "@/lib/ai-analysis"
 import { Logo } from "@/components/layout/logo"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -12,6 +13,11 @@ import {
   Sparkles,
 } from "lucide-react"
 
+// True only when paying tiers are actually running the stronger model. Driven
+// from the same config the analyser uses, so this page cannot advertise a
+// model the deployment isn't configured for.
+const PREMIUM_ANALYSIS_LIVE = getAnalysisConfig("pro").isPremium
+
 const tiers = [
   {
     name: "Free",
@@ -24,7 +30,8 @@ const tiers = [
     href: "/register",
     features: [
       { text: "3 lifetime complaint sends", included: true },
-      { text: "Full AI legal analysis", included: true },
+      { text: "Standard AI legal analysis", included: true },
+      { text: "Advanced AI analysis (deeper case law)", included: false },
       { text: "Case builder access", included: true },
       { text: "Auto-send via email", included: true },
       { text: "Legal resources & dictionary", included: true },
@@ -46,8 +53,8 @@ const tiers = [
     href: "/register",
     features: [
       { text: "5 complaints/month", included: true },
-      { text: "10 follow-ups per complaint", included: true },
-      { text: "Full AI legal analysis", included: true },
+      { text: "3 follow-ups per complaint", included: true },
+      { text: "Advanced AI analysis (deeper case law)", included: PREMIUM_ANALYSIS_LIVE },
       { text: "Auto-send via email", included: true },
       { text: "Basic complaint tracking", included: true },
       { text: "5 files per issue (200MB)", included: true },
@@ -68,8 +75,8 @@ const tiers = [
     href: "/register",
     features: [
       { text: "15 complaints/month", included: true },
-      { text: "20 follow-ups per complaint", included: true },
-      { text: "Full AI legal analysis", included: true },
+      { text: "5 follow-ups per complaint", included: true },
+      { text: "Advanced AI analysis (deeper case law)", included: PREMIUM_ANALYSIS_LIVE },
       { text: "Auto-send via email", included: true },
       { text: "Full complaint tracking", included: true },
       { text: "15 files per issue (500MB)", included: true },
@@ -92,8 +99,8 @@ const tiers = [
     href: "/register",
     features: [
       { text: "30 complaints/month", included: true },
-      { text: "50 follow-ups per complaint", included: true },
-      { text: "Full AI legal analysis", included: true },
+      { text: "10 follow-ups per complaint", included: true },
+      { text: "Advanced AI analysis (deeper case law)", included: PREMIUM_ANALYSIS_LIVE },
       { text: "Auto-send via email", included: true },
       { text: "Full complaint tracking", included: true },
       { text: "50 files per issue (2GB)", included: true },

@@ -362,6 +362,65 @@ panel already in the backlog, since both need the same `role`-gated area.
 
 ---
 
+## 3f. Tiered models, tightened follow-ups, and top-up packs — 21 Aug 2026
+
+### Model per tier — but constrained by hosting, not taste
+
+Free users get `claude-sonnet-5`, paying users get `claude-opus-5`. Both are
+environment variables (`ANALYSIS_MODEL_FREE/PAID`, `ANALYSIS_EFFORT_FREE/PAID`),
+so the trade-off is tunable without a deploy.
+
+**However — the project is on Vercel's Hobby plan, which kills any request at 60
+seconds.** Opus takes 139-239s and Sonnet at medium takes 64s, so *every* tier
+currently runs Sonnet 5 at low effort (46s). The tier split is wired and tested;
+it simply cannot activate until the hosting allows it.
+
+**To switch it on, after moving to Vercel Pro:**
+1. `maxDuration` in `src/app/api/issues/[id]/analyze/route.ts` → `300`
+2. Set `ANALYSIS_MODEL_PAID=claude-opus-5` and `ANALYSIS_EFFORT_PAID=medium`
+   in Vercel (no code change)
+
+Also worth noting: Vercel's Hobby plan prohibits commercial use, so Pro is
+needed before the first subscription payment regardless of the timeout.
+
+### The premium claim is self-correcting
+
+The pricing page's "Advanced AI analysis (deeper case law)" line and the in-app
+upgrade prompt are both driven from `getAnalysisConfig("pro").isPremium`. While
+paying tiers run Sonnet, the pricing page shows it as *not* included and the
+in-app prompt does not appear. The moment the env var flips to Opus, both turn
+on. **The page cannot advertise a model the deployment isn't running** — which
+is the same failure mode as the fake stats and fake petitions, prevented
+structurally rather than by remembering.
+
+### Follow-up allowances reduced
+
+Basic 10→3, Pro 20→5, Agency 50→10. Each follow-up is a full generation costing
+8-40p; the old numbers were set when generation cost ~4p. A Basic user using all
+ten on five complaints would have cost ~£22 against £4.99. Three still covers a
+normal chain: initial, chase, escalation.
+
+### Designed, not built: complaint top-up packs
+
+Jake's request — let heavy users (particularly auditors filing en masse) buy
+extra complaints rather than jump a subscription tier.
+
+Costed against a measured 40p per Opus generation:
+
+| Pack | Price | Per complaint | Margin |
+|---|---|---|---|
+| 5 extra | £4.99 | £1.00 | ~60% |
+| 15 extra | £11.99 | £0.80 | ~50% |
+| 40 extra (Agency only) | £24.99 | £0.62 | ~35% |
+
+Genuinely profitable, and the discount ladder rewards exactly the volume
+behaviour Jake describes. Implementation would need Stripe one-time payments,
+a credit balance on `User`, and `checkComplaintLimit` to fall through to that
+balance once the monthly allowance is spent. **Not built** — it should wait
+until the subscription path has taken at least one real payment.
+
+---
+
 ## 4. Next up
 
 Roughly in priority order.
