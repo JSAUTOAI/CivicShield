@@ -279,6 +279,24 @@ RESPOND IN VALID JSON matching this exact structure:
  * reads better: the user sees their legal analysis in around 20 seconds rather
  * than watching a spinner while a 12,000-character letter is written.
  */
+/**
+ * Drop the "complaintText" line from the JSON schema in the analysis prompt.
+ * Keeps one prompt as the single source of truth for both call shapes.
+ */
+function stripLetterFromSchema(prompt: string): string {
+  const lines = prompt.split("\n")
+  const kept = lines.filter((line) => !line.trimStart().startsWith('"complaintText"'))
+  if (kept.length === lines.length) {
+    // The schema changed shape — better to know than to silently send the
+    // letter field and pay for a letter twice.
+    console.warn(
+      "[analysis] complaintText line not found in the prompt schema — the " +
+        "analysis call may generate a letter it does not need."
+    )
+  }
+  return kept.join("\n")
+}
+
 const ANALYSIS_ONLY_SUFFIX = `
 
 THIS REQUEST IS ANALYSIS ONLY.
@@ -437,7 +455,12 @@ Provide a full legal analysis with:
 6. Recommended actions the complainant should take`
 
   // Motoring-specific augmentation
-  let systemPrompt = ANALYSIS_SYSTEM_PROMPT + ANALYSIS_ONLY_SUFFIX
+  // Physically remove complaintText from the schema rather than asking the
+  // model not to fill it in. Instructing it was unreliable — on one production
+  // run it wrote the full letter anyway, which both blew the time budget (52s
+  // instead of ~30s) and produced a duplicate complaint row downstream. A field
+  // that isn't in the schema can't be filled.
+  let systemPrompt = stripLetterFromSchema(ANALYSIS_SYSTEM_PROMPT) + ANALYSIS_ONLY_SUFFIX
   let fullUserMessage = userMessage
 
   if (issue.issueCategory === "Motoring & Vehicle Issues") {
@@ -509,6 +532,10 @@ Provide a full legal analysis with:
   }
 
   const parsed = JSON.parse(jsonMatch[0]) as LegalAnalysisResult
+  // The letter is written by generateComplaintLetter, never here. Forcing this
+  // empty keeps the "is the draft still waiting for a letter?" check downstream
+  // honest even if the model volunteers one.
+  parsed.complaintText = ""
   return enrichWithVerifiedUrls(parsed)
 }
 
