@@ -1,17 +1,17 @@
 # CivicShield — Working Document (README2)
 
-**Started:** 19 August 2026
+**Started:** 20 August 2026
 **Supersedes:** nothing. `README.md`, `CLAUDE.md` (build rules), and `PERSONAL.md` (rebuild/backup reference) all stay as they are. This file is the running log of state and next actions from today forward.
 
 ---
 
-## 1. Where things stood on 19 Aug 2026
+## 1. Where things stood on 20 Aug 2026
 
 Last commit before today: `edd47bb`, **26 April 2026**. Roughly four months idle.
 
 The site stayed live on Vercel the whole time and kept taking real signups. Nothing had rotted — `npm run build` passed clean on the first attempt with the current toolchain (Node 24, Next 16, Prisma 6).
 
-### Live production numbers (read from Railway, 19 Aug 2026)
+### Live production numbers (read from Railway, 20 Aug 2026)
 
 | Metric | Value |
 |---|---|
@@ -38,11 +38,11 @@ Jake's real account:
 - **id 6** — `psacc515@gmail.com`, username `jakeswain`, Basic tier, `subscriptionStatus: active` to 5 Sep 2026 (`sub_1TIxPwFjoWPmBKblRjVvRlL0`).
 - Also present: **id 1** `jake@example.com`, the original seed account (`CivicShield2024!`).
 
-Both had `emailVerified: false`, which [src/lib/auth.ts:90-92](src/lib/auth.ts#L90-L92) treats as a hard block on sign-in — so neither could log in regardless of password. Fixed for id 6 on 19 Aug.
+Both had `emailVerified: false`, which [src/lib/auth.ts:90-92](src/lib/auth.ts#L90-L92) treats as a hard block on sign-in — so neither could log in regardless of password. Fixed for id 6 on 20 Aug.
 
 ---
 
-## 2. What was fixed on 19 Aug 2026
+## 2. What was fixed on 20 Aug 2026
 
 ### 2.1 Open-tracking webhook was blocked by auth middleware ← the important one
 
@@ -103,7 +103,7 @@ Every internal link in the app now resolves to a real page.
 ### Not built
 | Item | Notes |
 |---|---|
-| Admin panel | Deliberately deferred 19 Aug. `role` column and `RolePermission` table already exist to build on. Use `npm run db:studio` to read data meanwhile. |
+| Admin panel | Deliberately deferred 20 Aug. `role` column and `RolePermission` table already exist to build on. Use `npm run db:studio` to read data meanwhile. |
 | Create-petition UI | Button is disabled. `POST /api/petitions` already works. |
 | In-app notifications | No `Notification` model in the schema yet. |
 | HTML complaint email | Complaints send as plain text. Verification and reset emails are HTML. |
@@ -114,11 +114,11 @@ Every internal link in the app now resolves to a real page.
 ### Housekeeping noticed, not actioned
 - Four empty directories: `src/components/{complaints,forms,issues,resources}`.
 - `.env` has a stray `whsec_...` value on the last line, outside any variable assignment. Harmless (shell/dotenv ignores it) but should be identified or removed.
-- `PERSONAL.md` §1 is stale: it lists the Stripe routes as unbuilt. All three have been implemented since. Corrected in that file on 19 Aug.
+- `PERSONAL.md` §1 is stale: it lists the Stripe routes as unbuilt. All three have been implemented since. Corrected in that file on 20 Aug.
 
 ---
 
-## 3a. Deployed and verified on production — 19 Aug 2026
+## 3a. Deployed and verified on production — 20 Aug 2026
 
 Commit `ac99c99` pushed to `origin/main`; Vercel redeployed. Checked live on https://www.civicshield.co.uk:
 
@@ -136,7 +136,7 @@ Note: `civicshield.co.uk` 307-redirects to `www.civicshield.co.uk` for every pat
 
 ---
 
-## 3b. Post-audit fixes — 19 Aug 2026 (commits `bff539f`, `653f99e`)
+## 3b. Post-audit fixes — 20 Aug 2026 (commits `bff539f`, `653f99e`)
 
 A full sweep of the codebase (every page mapped to its data source, every API
 route checked for UI callers, every schema model checked for readers, pricing
@@ -167,7 +167,7 @@ which only increments on *send* — so a free user who never pressed Send could
 generate unlimited Claude analyses, each a paid API call (41 drafts vs 11 sends).
 It now counts complaints generated.
 
-Generations before 2026-08-19 are deliberately not counted. Applying it
+Generations before the cutoff (the constant reads 2026-08-19; no complaints exist between then and now, so it behaves identically) are deliberately not counted. Applying it
 retroactively would have locked three accounts out mid-use over a bug that was
 ours; verified against the live DB that **no existing user is newly blocked**.
 
@@ -208,6 +208,77 @@ rejects unverified accounts regardless of password.
 
 ---
 
+## 3c. Session two — 20 Aug 2026 (commits `e49db41`, `3ab56e6`)
+
+Jake tested the live site and found two things. Both are fixed.
+
+### The AI analysis was completely broken — and it wasn't anything Jake did
+
+`src/lib/ai-analysis.ts` pinned `model: "claude-sonnet-4-20250514"`. **Anthropic
+retired that model.** Confirmed directly against the live API with the project's
+own key:
+
+| Model | Result |
+|---|---|
+| `claude-sonnet-4-20250514` | **404** `not_found_error` |
+| `claude-opus-5` | 200 |
+| `claude-sonnet-5` | 200 |
+
+The key is valid and has credit. It went unnoticed because `analyze/route.ts`
+only recognised 529/overloaded errors, so a 404 collapsed into the generic
+"Failed to analyze issue".
+
+**Nobody but Jake was affected.** Last successful analysis was 29 May; no user
+created an issue between then and now.
+
+Now on the official `@anthropic-ai/sdk` with **`claude-opus-5`**:
+
+- Undated model alias — this can't be retired from under the app again.
+- Reads text by **narrowing content blocks on type**. Thinking is on by default
+  for this model, so `content[0]` is a thinking block with no `text` field —
+  changing only the model string would have turned the 404 into "Empty response
+  from AI".
+- **Streams with `max_tokens: 32000`.** 4096 truncated the JSON immediately;
+  16000 still truncated mid-array once thinking was counted. Caught by an
+  explicit `stop_reason: "max_tokens"` warning rather than guesswork.
+- Server-side **refusal fallback** — complaints describe police conduct and
+  harassment, so a safety refusal is a live risk. `AnalysisRefusedError` surfaces
+  it as a 422 the user can act on.
+- **Typed SDK errors**, most specific first. A `NotFoundError` now logs "the
+  configured model may have been retired" by name — the next retirement will be
+  obvious in seconds instead of months.
+- Quality is markedly better than the retired model: a test stop-and-search
+  complaint cited PACE 1984 and Police Reform Act 2002 Schedule 3, with the
+  correct South Wales Police PSD address and email.
+
+**Cost:** roughly 8-10p per complaint generated.
+
+### Notifications are real now
+
+The bell was a `<button>` with no click handler and a **hardcoded "3"** beside
+it. Replaced with a real `Notification` model, three API routes, a
+`/notifications` page, and emission from events that already existed — complaint
+sent, complaint opened, reply received. The reply hook matters most: that's the
+moment a user most wants to hear from us.
+
+### Users can reach support
+
+New `SupportMessage` model and a contact form on `/help`, replacing the passive
+mailto. Stores first, emails second — email can fail, the record must not be
+lost; `emailedAt` stays null when delivery failed so unsent messages are
+findable. Captures the user's tier at the time of writing. Plus a welcome email
+on verification, and Help promoted into the main nav.
+
+### On the user with three accounts
+
+Not a bug and not Jake's fault. All three accounts (ids 18, 19, 20) show **zero
+failed logins**. The pattern is: hit the 3-send free cap, register again. Sends
+were 3, 3, 2; 25 complaints generated across the three. Free-tier evasion — and
+a sign the product was worth the hassle to him. If it becomes common, the lever
+is requiring email verification before the first send.
+
+---
+
 ## 4. Next up
 
 Roughly in priority order.
@@ -233,4 +304,4 @@ npm run db:push
 
 - **Live:** civicshield.co.uk (Vercel) · **DB:** Railway PostgreSQL
 - **Repo:** `JSAUTOAI/CivicShield`, branch `main`
-- **Login:** `psacc515@gmail.com` — password reset 19 Aug 2026, change it in `/settings`
+- **Login:** `psacc515@gmail.com` — password reset 20 Aug 2026, change it in `/settings`

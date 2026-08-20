@@ -2,7 +2,7 @@
 
 Your offline-safe reference for the project. If Claude is unavailable, your PC dies, or you need to hand this to someone else — this document + the GitHub repo + your `.env` backup is enough to rebuild everything.
 
-**Last updated:** 2026-04-18 (feature list partially corrected 2026-08-19 — see `README2.md` for current state)
+**Last updated:** 2026-04-18 (feature list partially corrected 2026-08-20 — see `README2.md` for current state)
 
 ---
 
@@ -45,8 +45,8 @@ Full system audit as of this file being written.
 
 **Since built (corrections to the above — see README2.md):**
 - `/api/stripe/*` (checkout, portal, webhook) — all three implemented
-- Resend open-tracking webhook `/api/email/events` — implemented; was blocked by middleware until 19 Aug 2026
-- Password reset — `/forgot-password`, `/reset-password` + both API routes built 19 Aug 2026
+- Resend open-tracking webhook `/api/email/events` — implemented; was blocked by middleware until 20 Aug 2026
+- Password reset — `/forgot-password`, `/reset-password` + both API routes built 20 Aug 2026
 
 ### Database — 22 tables
 

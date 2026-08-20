@@ -14,7 +14,7 @@ Meanwhile the site **is live and has been quietly taking real signups** — 29 u
 
 ## What the audit found
 
-### Live production state (Railway DB, read 19 Aug 2026)
+### Live production state (Railway DB, read 20 Aug 2026)
 
 | Metric | Value |
 |---|---|
