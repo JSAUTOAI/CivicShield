@@ -63,9 +63,14 @@ export async function POST(request: Request) {
         jurisdiction: c.jurisdiction,
         responseTimeDays: c.responseTimeDays,
         escalationPath: Array.isArray(c.escalationPath) ? c.escalationPath.map(String) : [],
-        sourceUrl: c.websiteUrl,
-        confidence: "high",
-        note: "Saved from a previous lookup",
+        sourceUrl: c.sourceUrl ?? c.websiteUrl,
+        // Only rows captured by a web-verified lookup carry verifiedAt. Older
+        // rows came from a model recalling details from memory and include
+        // outright inventions, so they must not be badged as verified.
+        confidence: c.verifiedAt ? "high" : "low",
+        note: c.verifiedAt
+          ? "Verified previously and saved"
+          : "Saved before we verified details against a source — please check it",
       })
     }
 
@@ -115,6 +120,9 @@ export async function POST(request: Request) {
               jurisdiction: f.jurisdiction,
               responseTimeDays: f.responseTimeDays,
               escalationPath: f.escalationPath,
+              sourceUrl: f.sourceUrl,
+              // Stamped only when the details came from a page we actually read.
+              verifiedAt: f.sourceUrl ? new Date() : null,
               isActive: true,
             },
           })
