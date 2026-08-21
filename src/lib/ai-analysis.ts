@@ -329,10 +329,11 @@ Rules:
 - Demand acknowledgement within 14 days and a full response within 28 days.
 - Set out the facts, then the legal basis, then the remedy sought.
 
-Return ONLY valid JSON in exactly this shape, with no markdown and no commentary:
-{
-  "complaintText": "The full letter as plain text, including addresses and date."
-}`
+Return the letter and NOTHING else — no JSON, no markdown, no code fences, no
+preamble, no commentary. Begin with the sender's address block and end with the
+sign-off. The response is written straight into the letter field the user
+reads and sends, so anything that is not the letter itself appears as a
+defect.`
 
 const MOTORING_SYSTEM_PROMPT_SUPPLEMENT = `
 
@@ -857,18 +858,48 @@ ${(analysis.precedents || []).map((p) => `- ${p.caseName} ${p.caseReference} (${
     console.warn(`Letter hit the ${MAX_TOKENS} token cap — it is likely truncated.`)
   }
 
-  // The model is asked for JSON, but a letter is prose — if the JSON wrapper is
-  // missing or malformed, the raw text is still a usable letter. Falling back
-  // beats failing the whole request over a formatting slip.
-  const jsonMatch = content.match(/\{[\s\S]*\}/)
-  if (jsonMatch) {
-    try {
-      const parsed = JSON.parse(jsonMatch[0]) as { complaintText?: string }
-      if (parsed.complaintText) return parsed.complaintText
-    } catch {
-      console.warn("Letter response was not valid JSON — using the raw text.")
+  return unwrapLetter(content)
+}
+
+/**
+ * Return the letter as plain prose.
+ *
+ * The letter used to be requested as JSON. When that JSON failed to parse — a
+ * truncated response is enough — the raw string was stored verbatim, and users
+ * saw a visible complaintText envelope full of literal escape sequences instead
+ * of a letter. The prompt now asks for plain text; this unwraps a JSON envelope
+ * only if one turns up anyway.
+ */
+function unwrapLetter(content: string): string {
+  const trimmed = content.trim()
+
+  // Strip a markdown code fence if the model adds one.
+  const fenced = trimmed.match(/^```(?:json|text)?\s*\n([\s\S]*?)\n?```$/)
+  const body = fenced ? fenced[1].trim() : trimmed
+
+  const KEY = '"complaintText"'
+  if (!body.startsWith("{") || !body.includes(KEY)) {
+    return body
+  }
+
+  try {
+    const parsed = JSON.parse(body) as { complaintText?: string }
+    if (parsed.complaintText) return parsed.complaintText
+  } catch {
+    // Usually a truncated response. Recover the string by hand rather than
+    // handing the user raw JSON to read.
+    const match = body.match(/"complaintText"\s*:\s*"([\s\S]*)$/)
+    if (match) {
+      const recovered = match[1]
+        .replace(/"\s*\}?\s*$/, "") // drop a trailing closing quote/brace
+        .replace(/\\n/g, "\n")
+        .replace(/\\t/g, "\t")
+        .replace(/\\"/g, '"')
+        .replace(/\\\\/g, "\\")
+      console.warn("Letter arrived wrapped in unparseable JSON — unescaped it by hand.")
+      return recovered.trim()
     }
   }
 
-  return content
+  return body
 }

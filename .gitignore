@@ -48,3 +48,7 @@ next-env.d.ts
 # sensitive data
 db_dump.md
 CLAUDE.md.temp
+
+# Backups written by scripts/repair-json-wrapped-complaints.mjs — these contain
+# real complaint letters, which are personal data. Never commit them.
+complaint-backup-*.json

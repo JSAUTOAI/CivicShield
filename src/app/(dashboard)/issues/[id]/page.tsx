@@ -38,6 +38,8 @@ import {
   X,
   Sparkles,
   ArrowRight,
+  Maximize2,
+  Minimize2,
 } from "lucide-react"
 
 // Types for the JSON stored in legalAnalysis table
@@ -109,6 +111,7 @@ export default function IssueDetailPage() {
   const issue = response?.data || (response as unknown as IssueDetail)
   const [complaintText, setComplaintText] = React.useState("")
   const [analyzing, setAnalyzing] = React.useState(false)
+  const [letterExpanded, setLetterExpanded] = React.useState(false)
   const [tier, setTier] = React.useState<string | null>(null)
   const [premiumLive, setPremiumLive] = React.useState(false)
 
@@ -147,10 +150,22 @@ export default function IssueDetailPage() {
   const legislation = (latestAnalysis?.relevantLaws || []) as unknown as StoredLegislation[]
   const actions = (latestAnalysis?.recommendedActions || []) as unknown as StoredAction[]
 
-  // Sync complaint text when data loads
+  // Sync the editor with whatever the server holds.
+  //
+  // This used to bail out whenever the box already had text, which meant a
+  // regenerated letter never appeared — the user pressed Regenerate, a new
+  // letter was written and saved, and the old one stayed on screen until a
+  // reload. Tracking the value we last pushed in lets a genuinely new letter
+  // through while still leaving the user's own unsaved edits alone.
+  const lastSyncedRef = React.useRef<string | null>(null)
   React.useEffect(() => {
-    if (latestComplaint?.complaintText && !complaintText) {
-      setComplaintText(latestComplaint.complaintText)
+    const serverText = latestComplaint?.complaintText
+    if (!serverText) return
+
+    const untouched = complaintText === lastSyncedRef.current
+    if (lastSyncedRef.current === null || untouched) {
+      setComplaintText(serverText)
+      lastSyncedRef.current = serverText
     }
   }, [latestComplaint, complaintText])
 
@@ -748,6 +763,25 @@ export default function IssueDetailPage() {
                         <RefreshCw className={cn("h-3.5 w-3.5", analyzing && "animate-spin")} />
                         <span className="hidden sm:inline">Regenerate</span>
                       </Button>
+                      {/* These letters run to several pages. The drag handle on
+                          the textarea is easy to miss, so give it an explicit
+                          control. */}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="gap-1.5"
+                        onClick={() => setLetterExpanded((v) => !v)}
+                        title={letterExpanded ? "Shrink the letter" : "Expand the letter to full height"}
+                      >
+                        {letterExpanded ? (
+                          <Minimize2 className="h-3.5 w-3.5" />
+                        ) : (
+                          <Maximize2 className="h-3.5 w-3.5" />
+                        )}
+                        <span className="hidden sm:inline">
+                          {letterExpanded ? "Shrink" : "Expand"}
+                        </span>
+                      </Button>
                       {latestComplaint.status === "draft" && (
                         <>
                           <Button variant="outline" size="sm" className="gap-1.5" onClick={handleSaveComplaint} disabled={saving}>
@@ -909,8 +943,20 @@ export default function IssueDetailPage() {
                       if (showBodyHint) setShowBodyHint(false)
                     }}
                     readOnly={latestComplaint.status === "sent"}
-                    className="w-full min-h-[400px] rounded-lg border border-border bg-muted/30 p-4 text-sm font-mono leading-relaxed focus:outline-none focus:ring-2 focus:ring-ring resize-y disabled:opacity-50"
+                    className={cn(
+                      "w-full rounded-lg border border-border bg-muted/30 p-4 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-ring resize-y disabled:opacity-50",
+                      // Serif, not monospace — this is a formal letter, and the
+                      // preview should look like the thing that gets sent.
+                      "font-serif",
+                      letterExpanded ? "min-h-[85vh]" : "min-h-[400px]"
+                    )}
                   />
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {complaintText.length.toLocaleString()} characters ·{" "}
+                    {letterExpanded
+                      ? "Full height — use Shrink to collapse"
+                      : "Use Expand above, or drag the bottom-right corner, to see more"}
+                  </p>
                 </CardContent>
               </Card>
             </section>
