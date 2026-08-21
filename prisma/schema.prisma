@@ -161,6 +161,7 @@ model Issue {
   aiChatMessages     AiChatMessage[]
   issueChangeHistory IssueChangeHistory[]
   legalCases         LegalCase[]
+  routes             ComplaintRoute[]
 
   @@map("issues")
 }
@@ -600,4 +601,67 @@ model SupportMessage {
 
   @@index([status, createdAt])
   @@map("support_messages")
+}
+
+/**
+ * One way a complaint can be pursued.
+ *
+ * A complaint rarely has a single destination. A solicitor dispute can go to
+ * the firm's complaints partner, the individual's employer, the SRA, or the
+ * Legal Ombudsman — each appropriate at a different point. A vehicle defect
+ * goes to the manufacturer for redress AND to the DVSA for safety, which are
+ * parallel purposes rather than an escalation.
+ *
+ * Most regulators reject a complaint that has not exhausted the organisation's
+ * own process first (the 8-week rule for the Financial and Legal Ombudsmen,
+ * local resolution for the IOPC), so escalation routes stay locked until their
+ * condition is met rather than being offered immediately.
+ */
+model ComplaintRoute {
+  id       Int    @id @default(autoincrement())
+  issueId  Int    @map("issue_id")
+
+  // primary  — the organisation itself, send now
+  // parallel — send now, serves a different purpose (DVSA safety, ICO breach)
+  // escalation — locked until its condition is met
+  routeType String @map("route_type")
+  sortOrder Int    @default(0) @map("sort_order")
+
+  organizationName String  @map("organization_name")
+  // What this route actually achieves, in plain English.
+  purpose          String
+  // email | form | post — a form route is the body's own process (ACAS Early
+  // Conciliation, DVSA defect report) and cannot be satisfied by an email.
+  method           String  @default("email")
+
+  contactEmail   String? @map("contact_email")
+  contactAddress String? @map("contact_address")
+  formUrl        String? @map("form_url")
+  // Page the contact details were read from. Null means unverified.
+  sourceUrl      String? @map("source_url")
+
+  // Human-readable unlock condition, e.g. "8 weeks after your complaint is
+  // sent, if it is unresolved".
+  condition          String?
+  unlockAfterDays    Int?     @map("unlock_after_days")
+  requiresNoResolution Boolean @default(false) @map("requires_no_resolution")
+  // Any statutory deadline the user must not miss, e.g. ACAS Early
+  // Conciliation within 3 months less one day of the incident.
+  deadlineNote       String?  @map("deadline_note")
+
+  // locked | available | sent | skipped
+  status      String    @default("available")
+  availableAt DateTime? @map("available_at")
+  sentAt      DateTime? @map("sent_at")
+  // Set once a notification has fired for this route unlocking, so the user
+  // is told once rather than on every page load.
+  notifiedAt  DateTime? @map("notified_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  issue Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+
+  @@index([issueId, routeType])
+  @@map("complaint_routes")
 }

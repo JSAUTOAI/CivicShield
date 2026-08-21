@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { PageSkeleton } from "@/components/ui/loading-skeleton"
 import { EmptyState, ErrorState } from "@/components/ui/empty-state"
+import { RouteMap } from "@/components/complaints/route-map"
 import type { IssueDetail } from "@/lib/types"
 import {
   ArrowLeft,
@@ -960,6 +961,11 @@ export default function IssueDetailPage() {
                 </CardContent>
               </Card>
             </section>
+          )}
+
+          {/* Every route this complaint can take, and when each opens up */}
+          {hasAnalysis && (
+            <RouteMap issueId={issueId} complaintText={complaintText} />
           )}
 
           {/* Recommended Actions */}
