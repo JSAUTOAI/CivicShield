@@ -36,6 +36,40 @@ import {
 
 const steps = ["Details", "Evidence", "Review", "Analysis"]
 
+/** One possible organisation the complaint could be addressed to. */
+interface OrgCandidate {
+  organizationName: string
+  organizationType: string
+  department: string | null
+  contactEmail: string | null
+  contactPhone: string | null
+  contactAddress: string | null
+  websiteUrl: string | null
+  complaintUrl: string | null
+  responseTimeDays: number | null
+  sourceUrl?: string | null
+  confidence?: "high" | "medium" | "low"
+  note?: string | null
+}
+
+/** Blank record to edit when the user is entering details by hand. */
+function emptyOrgDetails(name: string): OrgCandidate {
+  return {
+    organizationName: name,
+    organizationType: "other",
+    department: null,
+    contactEmail: null,
+    contactPhone: null,
+    contactAddress: null,
+    websiteUrl: null,
+    complaintUrl: null,
+    responseTimeDays: null,
+    sourceUrl: null,
+    confidence: "low",
+    note: "Entered manually",
+  }
+}
+
 /** A file staged in the wizard, plus how its upload is going. */
 interface PendingFile {
   file: File
@@ -97,17 +131,11 @@ export default function NewIssuePage() {
   }, [])
   const [motoringEvidenceChecked, setMotoringEvidenceChecked] = React.useState<Set<string>>(new Set())
   const [orgSearching, setOrgSearching] = React.useState(false)
-  const [orgDetails, setOrgDetails] = React.useState<{
-    organizationName: string
-    organizationType: string
-    department: string | null
-    contactEmail: string | null
-    contactPhone: string | null
-    contactAddress: string | null
-    websiteUrl: string | null
-    complaintUrl: string | null
-    responseTimeDays: number | null
-  } | null>(null)
+  const [orgDetails, setOrgDetails] = React.useState<OrgCandidate | null>(null)
+  // Search returns options rather than one answer, so the user chooses which
+  // organisation a formal complaint is actually addressed to.
+  const [orgCandidates, setOrgCandidates] = React.useState<OrgCandidate[] | null>(null)
+  const [manualEntry, setManualEntry] = React.useState(false)
 
   const issueTypeOptions: SelectOption[] = formData.category
     ? (ISSUE_CATEGORIES[formData.category as IssueCategory] || []).map((t) => ({
@@ -345,21 +373,31 @@ export default function NewIssuePage() {
                         if (!formData.organization.trim()) return
                         setOrgSearching(true)
                         setOrgDetails(null)
+                        setOrgCandidates(null)
+                        setManualEntry(false)
                         try {
                           const res = await fetch("/api/organisations/search", {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ organizationName: formData.organization }),
+                            body: JSON.stringify({
+                              organizationName: formData.organization,
+                              issueCategory: formData.category || null,
+                              location: formData.location || null,
+                            }),
                           })
                           const data = await res.json()
-                          if (data.success && data.data) {
-                            setOrgDetails(data.data)
-                            toast.success(data.data.cached ? "Organisation details found (cached)" : "Organisation details found!")
-                          } else {
-                            toast.error(data.error || "Could not find details for this organisation")
+                          const found = data?.data?.candidates ?? []
+                          setOrgCandidates(found)
+                          if (found.length === 0) {
+                            toast.error(
+                              data.error ||
+                                "Nothing verified found for that name — you can enter the details yourself."
+                            )
+                            setManualEntry(true)
                           }
                         } catch {
                           toast.error("Failed to search for organisation")
+                          setManualEntry(true)
                         } finally {
                           setOrgSearching(false)
                         }
@@ -384,50 +422,188 @@ export default function NewIssuePage() {
                 </div>
               </div>
 
-              {/* Organisation Details Card */}
-              {orgDetails && (
-                <div className="rounded-lg border border-emerald-200 bg-emerald-50/30 p-4 dark:border-emerald-800/30 dark:bg-emerald-900/10">
-                  <div className="flex items-center justify-between mb-3">
-                    <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              {/* Candidate chooser — the user picks, nothing is auto-filled.
+                  These details go on a formal legal complaint, so using an
+                  unverified address must be a deliberate choice, not a default. */}
+              {orgCandidates && orgCandidates.length > 0 && !orgDetails && (
+                <div className="rounded-lg border border-border bg-muted/30 p-4">
+                  <h4 className="mb-1 text-sm font-semibold text-foreground">
+                    {orgCandidates.length === 1
+                      ? "One possible match"
+                      : `${orgCandidates.length} possible matches`}
+                  </h4>
+                  <p className="mb-3 text-xs text-muted-foreground">
+                    Check the source before choosing. Anything we couldn&apos;t verify is
+                    left blank rather than guessed at — you can fill it in yourself.
+                  </p>
+                  <div className="space-y-2">
+                    {orgCandidates.map((c, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => {
+                          setOrgDetails(c)
+                          toast.success(`Using ${c.organizationName}`)
+                        }}
+                        className="w-full rounded-lg border border-border bg-card p-3 text-left transition-colors hover:border-brand-400 hover:bg-accent"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="text-sm font-semibold text-foreground">
+                            {c.organizationName}
+                          </span>
+                          <Badge
+                            variant={
+                              c.confidence === "high"
+                                ? "success"
+                                : c.confidence === "medium"
+                                  ? "warning"
+                                  : "default"
+                            }
+                            className="flex-shrink-0 text-[10px]"
+                          >
+                            {c.confidence === "high"
+                              ? "Verified"
+                              : c.confidence === "medium"
+                                ? "Likely"
+                                : "Unconfirmed"}
+                          </Badge>
+                        </div>
+                        <div className="mt-1.5 space-y-0.5 text-xs">
+                          <p>
+                            <span className="text-muted-foreground">Email: </span>
+                            {c.contactEmail ?? (
+                              <span className="text-amber-600 dark:text-amber-500">
+                                none published — you&apos;ll need to add one
+                              </span>
+                            )}
+                          </p>
+                          <p>
+                            <span className="text-muted-foreground">Address: </span>
+                            {c.contactAddress ?? (
+                              <span className="text-amber-600 dark:text-amber-500">
+                                not found
+                              </span>
+                            )}
+                          </p>
+                          {c.note && <p className="pt-1 text-muted-foreground">{c.note}</p>}
+                          {c.sourceUrl && (
+                            <p className="truncate pt-0.5">
+                              <span className="text-muted-foreground">Source: </span>
+                              <span className="text-brand-600 dark:text-brand-400">
+                                {c.sourceUrl}
+                              </span>
+                            </p>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setManualEntry(true)
+                      setOrgCandidates(null)
+                    }}
+                    className="mt-3 text-xs font-medium text-brand-600 hover:underline dark:text-brand-400"
+                  >
+                    None of these — enter the details myself
+                  </button>
+                </div>
+              )}
+
+              {/* Manual entry, and editing whatever was chosen. */}
+              {(manualEntry || orgDetails) && (
+                <div className="rounded-lg border border-border bg-muted/30 p-4">
+                  <div className="mb-3 flex items-center justify-between">
+                    <h4 className="flex items-center gap-2 text-sm font-semibold text-foreground">
                       <CheckCircle className="h-4 w-4 text-emerald-500" />
-                      Organisation Details Found
+                      Who the complaint goes to
                     </h4>
                     <button
                       type="button"
-                      onClick={() => setOrgDetails(null)}
+                      onClick={() => {
+                        setOrgDetails(null)
+                        setManualEntry(false)
+                      }}
                       className="text-xs text-muted-foreground hover:text-foreground"
                     >
                       Clear
                     </button>
                   </div>
-                  <div className="grid gap-1.5 text-sm">
-                    {orgDetails.contactEmail && (
-                      <p><span className="text-muted-foreground">Email:</span> {orgDetails.contactEmail}</p>
-                    )}
-                    {orgDetails.contactAddress && (
-                      <p><span className="text-muted-foreground">Address:</span> {orgDetails.contactAddress}</p>
-                    )}
-                    {orgDetails.contactPhone && (
-                      <p><span className="text-muted-foreground">Phone:</span> {orgDetails.contactPhone}</p>
-                    )}
-                    {orgDetails.websiteUrl && (
-                      <p><span className="text-muted-foreground">Website:</span>{" "}
-                        <a href={orgDetails.websiteUrl} target="_blank" rel="noopener noreferrer" className="text-brand-600 hover:underline dark:text-brand-400">
-                          {orgDetails.websiteUrl}
-                        </a>
-                      </p>
-                    )}
-                    {orgDetails.complaintUrl && (
-                      <p><span className="text-muted-foreground">Complaints Page:</span>{" "}
-                        <a href={orgDetails.complaintUrl} target="_blank" rel="noopener noreferrer" className="text-brand-600 hover:underline dark:text-brand-400">
-                          {orgDetails.complaintUrl}
-                        </a>
-                      </p>
-                    )}
-                    {orgDetails.responseTimeDays && (
-                      <p><span className="text-muted-foreground">Expected Response:</span> {orgDetails.responseTimeDays} days</p>
-                    )}
+
+                  {orgDetails?.sourceUrl && (
+                    <p className="mb-3 text-xs text-muted-foreground">
+                      Found at{" "}
+                      <a
+                        href={orgDetails.sourceUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-brand-600 hover:underline dark:text-brand-400"
+                      >
+                        {orgDetails.sourceUrl}
+                      </a>{" "}
+                      — worth checking before you send.
+                    </p>
+                  )}
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                        Complaints email
+                      </label>
+                      <Input
+                        type="email"
+                        placeholder="complaints@example.co.uk"
+                        value={orgDetails?.contactEmail ?? ""}
+                        onChange={(e) =>
+                          setOrgDetails({
+                            ...(orgDetails ?? emptyOrgDetails(formData.organization)),
+                            contactEmail: e.target.value || null,
+                          })
+                        }
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                        Phone (optional)
+                      </label>
+                      <Input
+                        placeholder="01234 567890"
+                        value={orgDetails?.contactPhone ?? ""}
+                        onChange={(e) =>
+                          setOrgDetails({
+                            ...(orgDetails ?? emptyOrgDetails(formData.organization)),
+                            contactPhone: e.target.value || null,
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                        Postal address
+                      </label>
+                      <Input
+                        placeholder="Including full postcode"
+                        value={orgDetails?.contactAddress ?? ""}
+                        onChange={(e) =>
+                          setOrgDetails({
+                            ...(orgDetails ?? emptyOrgDetails(formData.organization)),
+                            contactAddress: e.target.value || null,
+                          })
+                        }
+                      />
+                    </div>
                   </div>
+
+                  {!orgDetails?.contactEmail && (
+                    <p className="mt-3 flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-500">
+                      <Info className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+                      <span>
+                        Without an email address the complaint can still be generated, but
+                        you&apos;ll need to send it yourself. We won&apos;t invent one.
+                      </span>
+                    </p>
+                  )}
                 </div>
               )}
 

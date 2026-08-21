@@ -1,15 +1,19 @@
 import { NextResponse } from "next/server"
+import Anthropic from "@anthropic-ai/sdk"
 import { auth } from "@/lib/auth"
 import { db } from "@/lib/db"
-// Uses raw fetch to Anthropic API (no SDK dependency)
+import { searchOrganisation, type OrganisationCandidate } from "@/lib/organisation-search"
+
+/** Web search plus a model call — longer than a plain request, well under the cap. */
+export const maxDuration = 60
 
 /**
  * POST /api/organisations/search
  *
- * Search for organisation complaint contact details.
- * 1. Check SubmissionTarget cache first
- * 2. If not found, use Claude AI to search for details
- * 3. Cache result in SubmissionTarget for future lookups
+ * Returns a LIST of candidate organisations for the user to choose from,
+ * each with the source URL its details came from. It no longer returns a
+ * single answer, because a single answer invites trusting it — and the
+ * previous version silently invented addresses when it could not find one.
  */
 export async function POST(request: Request) {
   try {
@@ -24,6 +28,7 @@ export async function POST(request: Request) {
     const body = await request.json()
     const organizationName = (body.organizationName || "").trim()
     const issueCategory = body.issueCategory?.trim() || null
+    const location = body.location?.trim() || null
 
     if (!organizationName || organizationName.length < 2) {
       return NextResponse.json(
@@ -32,164 +37,112 @@ export async function POST(request: Request) {
       )
     }
 
-    // 1. Check cache (SubmissionTarget table)
-    const cached = await db.submissionTarget.findFirst({
+    const candidates: OrganisationCandidate[] = []
+
+    // Previously-verified entries come first — they were confirmed once and
+    // save both a web search and the wait.
+    const cached = await db.submissionTarget.findMany({
       where: {
         organizationName: { contains: organizationName, mode: "insensitive" },
         isActive: true,
       },
+      take: 3,
     })
 
-    if (cached) {
+    for (const c of cached) {
+      candidates.push({
+        organizationName: c.organizationName,
+        organizationType: c.organizationType,
+        department: c.department,
+        contactEmail: c.contactEmail,
+        contactPhone: c.contactPhone,
+        contactAddress: c.contactAddress,
+        websiteUrl: c.websiteUrl,
+        complaintUrl: c.complaintUrl,
+        region: c.region,
+        jurisdiction: c.jurisdiction,
+        responseTimeDays: c.responseTimeDays,
+        escalationPath: Array.isArray(c.escalationPath) ? c.escalationPath.map(String) : [],
+        sourceUrl: c.websiteUrl,
+        confidence: "high",
+        note: "Saved from a previous lookup",
+      })
+    }
+
+    if (!process.env.ANTHROPIC_API_KEY) {
       return NextResponse.json({
         success: true,
-        data: {
-          organizationName: cached.organizationName,
-          organizationType: cached.organizationType,
-          department: cached.department,
-          contactEmail: cached.contactEmail,
-          contactPhone: cached.contactPhone,
-          contactAddress: cached.contactAddress,
-          websiteUrl: cached.websiteUrl,
-          complaintUrl: cached.complaintUrl,
-          region: cached.region,
-          jurisdiction: cached.jurisdiction,
-          responseTimeDays: cached.responseTimeDays,
-          escalationPath: cached.escalationPath,
-        },
-        cached: true,
+        data: { candidates, searched: false },
+        error: null,
       })
     }
 
-    // 2. Search via Claude AI
-    const apiKey = process.env.ANTHROPIC_API_KEY
-    if (!apiKey) {
-      return NextResponse.json(
-        { success: false, data: null, error: "AI search not available — please enter details manually" },
-        { status: 503 }
-      )
-    }
-
-    const issueCategoryContext = issueCategory
-      ? `\nThe complaint relates to the category: "${issueCategory}". Use this to identify the most relevant complaints department or division within the organisation.`
-      : ""
-
-    const prompt = `Find the COMPLAINTS department contact information for the following UK organisation: "${organizationName}".${issueCategoryContext}
-
-I need the real, verified complaints department details — NOT general contact or customer service details. Specifically find:
-- The complaints department email address
-- The complaints department postal address
-- The complaints department phone number
-- The main website URL
-- The dedicated complaints/feedback submission page URL
-
-Return ONLY valid JSON with no other text:
-{
-  "organizationName": "Official full name of the organisation",
-  "organizationType": "public_sector" or "business" or "legal" or "regulatory" or "other",
-  "department": "Name of complaints department if known, or null",
-  "contactEmail": "Complaints email address, or null if not found",
-  "contactPhone": "Complaints phone number, or null if not found",
-  "contactAddress": "Full postal address for complaints department, or null if not found",
-  "websiteUrl": "Main website URL, or null",
-  "complaintUrl": "Direct complaints page URL, or null",
-  "region": "Region e.g. England and Wales, Scotland, UK-wide, or null",
-  "jurisdiction": "Jurisdiction e.g. England, Wales, Scotland, UK, or null",
-  "responseTimeDays": estimated response time in working days (number), or null,
-  "escalationPath": ["Array of escalation bodies in order, e.g. Internal Review, then Ombudsman, etc."]
-}
-
-Important: Only include information you are confident is accurate and current. Use null for any field you cannot verify. Do not guess or fabricate contact details.`
-
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 1024,
-        messages: [{ role: "user", content: prompt }],
-      }),
-    })
-
-    if (!response.ok) {
-      const errText = await response.text().catch(() => "")
-      console.error("Anthropic API error:", response.status, errText)
-      return NextResponse.json(
-        { success: false, data: null, error: "AI search temporarily unavailable. Please enter details manually." },
-        { status: 503 }
-      )
-    }
-
-    const message = await response.json()
-    const textBlock = message.content?.find((block: { type: string }) => block.type === "text")
-    const content = textBlock?.text || ""
-
-    // Parse JSON from response
-    const jsonMatch = content.match(/\{[\s\S]*\}/)
-    if (!jsonMatch) {
-      return NextResponse.json(
-        { success: false, data: null, error: "Could not find details for this organisation. Please enter manually." },
-        { status: 404 }
-      )
-    }
-
-    let parsed: Record<string, unknown>
     try {
-      parsed = JSON.parse(jsonMatch[0])
-    } catch {
-      return NextResponse.json(
-        { success: false, data: null, error: "Could not parse organisation details. Please enter manually." },
-        { status: 500 }
+      const found = await searchOrganisation({ organizationName, issueCategory, location })
+
+      // Don't show the same organisation twice.
+      const seen = new Set(
+        candidates.map((c) => `${c.organizationName.toLowerCase()}|${c.contactEmail ?? ""}`)
       )
-    }
+      for (const f of found) {
+        const key = `${f.organizationName.toLowerCase()}|${f.contactEmail ?? ""}`
+        if (!seen.has(key)) {
+          candidates.push(f)
+          seen.add(key)
+        }
+      }
 
-    const result = {
-      organizationName: String(parsed.organizationName || organizationName),
-      organizationType: String(parsed.organizationType || "other"),
-      department: parsed.department ? String(parsed.department) : null,
-      contactEmail: parsed.contactEmail ? String(parsed.contactEmail) : null,
-      contactPhone: parsed.contactPhone ? String(parsed.contactPhone) : null,
-      contactAddress: parsed.contactAddress ? String(parsed.contactAddress) : null,
-      websiteUrl: parsed.websiteUrl ? String(parsed.websiteUrl) : null,
-      complaintUrl: parsed.complaintUrl ? String(parsed.complaintUrl) : null,
-      region: parsed.region ? String(parsed.region) : null,
-      jurisdiction: parsed.jurisdiction ? String(parsed.jurisdiction) : null,
-      responseTimeDays: typeof parsed.responseTimeDays === "number" ? parsed.responseTimeDays : null,
-      escalationPath: Array.isArray(parsed.escalationPath) ? parsed.escalationPath : [],
-    }
-
-    // 3. Cache in SubmissionTarget
-    try {
-      await db.submissionTarget.create({
-        data: {
-          organizationName: result.organizationName,
-          organizationType: result.organizationType,
-          department: result.department,
-          contactEmail: result.contactEmail,
-          contactPhone: result.contactPhone,
-          contactAddress: result.contactAddress,
-          websiteUrl: result.websiteUrl,
-          complaintUrl: result.complaintUrl,
-          region: result.region,
-          jurisdiction: result.jurisdiction,
-          responseTimeDays: result.responseTimeDays,
-          escalationPath: result.escalationPath,
-          isActive: true,
-        },
-      })
-    } catch (cacheErr) {
-      // Non-fatal — log and continue
-      console.error("Failed to cache org details:", cacheErr)
+      // Cache only what was actually verified — caching a null-heavy guess
+      // would poison future lookups for everyone.
+      for (const f of found) {
+        if (!f.contactEmail && !f.contactAddress) continue
+        const exists = await db.submissionTarget.findFirst({
+          where: { organizationName: f.organizationName, contactEmail: f.contactEmail },
+        })
+        if (exists) continue
+        await db.submissionTarget
+          .create({
+            data: {
+              organizationName: f.organizationName,
+              organizationType: f.organizationType,
+              department: f.department,
+              contactEmail: f.contactEmail,
+              contactPhone: f.contactPhone,
+              contactAddress: f.contactAddress,
+              websiteUrl: f.websiteUrl,
+              complaintUrl: f.complaintUrl,
+              region: f.region,
+              jurisdiction: f.jurisdiction,
+              responseTimeDays: f.responseTimeDays,
+              escalationPath: f.escalationPath,
+              isActive: true,
+            },
+          })
+          .catch((e) => console.error("Failed to cache organisation:", e))
+      }
+    } catch (searchErr) {
+      console.error("Organisation web search failed:", searchErr)
+      if (candidates.length === 0) {
+        const isCredit =
+          searchErr instanceof Anthropic.BadRequestError &&
+          String(searchErr.message).toLowerCase().includes("credit balance")
+        return NextResponse.json(
+          {
+            success: false,
+            data: { candidates: [], searched: false },
+            error: isCredit
+              ? "Search is temporarily unavailable. Please enter the details manually."
+              : "Couldn't search for this organisation. Please enter the details manually.",
+          },
+          { status: 503 }
+        )
+      }
     }
 
     return NextResponse.json({
       success: true,
-      data: result,
-      cached: false,
+      data: { candidates, searched: true },
+      error: null,
     })
   } catch (error) {
     console.error("Organisation search error:", error)

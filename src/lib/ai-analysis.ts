@@ -451,9 +451,33 @@ Provide a full legal analysis with:
 1. Rights violations identified with severity ratings
 2. Relevant UK case law precedents with accurate citations
 3. Applicable UK legislation
-4. A complete, professional, solicitor-grade formal complaint letter addressed to the correct complaints department at ${issue.organization}. Use the complainant's real details if provided. Research and include the most likely complaints department address and email for ${issue.organization}.
+4. A complete, professional, solicitor-grade formal complaint letter addressed to the correct complaints department at ${issue.organization}. Use the complainant's real details if provided.
 5. CC recipients — identify the correct oversight/regulatory body for this type of complaint
-6. Recommended actions the complainant should take`
+6. Recommended actions the complainant should take
+
+RECIPIENT CONTACT DETAILS — READ CAREFULLY:
+${
+  issue.organizationMetadata
+    ? "Verified contact details for this organisation are supplied above. Use those exactly."
+    : `NO verified contact details have been supplied for ${issue.organization}.
+
+You do NOT have web access and cannot look them up. Therefore:
+- Set "complaintRecipient.email" to null.
+- Set "complaintRecipient.address" to an empty string.
+- Set "complaintRecipient.name" to a role, e.g. "The Complaints Manager", never a person's name.
+- In the letter, leave the recipient address block as [Recipient address] so the user knows to fill it in.
+
+Do NOT invent an email address. Do NOT construct one from the organisation's
+name, such as info@ or complaints@ followed by a guessed domain. A user may
+send a formal legal complaint to whatever address you produce; an invented one
+either goes nowhere or reaches an uninvolved stranger. Returning null is the
+correct and expected answer here.
+
+This does NOT apply to well-known public bodies with published complaints
+addresses — a police force, government department, ombudsman or regulator you
+are confident of may be addressed normally. It applies to private companies
+and small local businesses whose details you cannot know.`
+}`
 
   // Motoring-specific augmentation
   // Physically remove complaintText from the schema rather than asking the
